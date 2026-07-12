@@ -242,9 +242,21 @@
    [0] 에셋 교체 지점 — 경로만 넣으면 도형 대신 이미지로 그립니다.
    ================================================================ */
 const ASSET_URLS = {
-  player: "", zombie: "", zombieBig: "", bullet: "", background: "",
-  sniper: "", medic: "", driver: "", bomber: "", engineer: "", batter: "",
-  car: "",
+  player: "assets/player.png",
+  zombie: "assets/zombie.png",
+  zombieBig: "assets/zombieBig.png",
+  bullet: "",                          // 탄환은 코드 발광이 더 예뻐서 유지
+  background: "assets/background.png",
+  sniper: "assets/sniper.png",
+  medic: "assets/medic.png",
+  driver: "assets/driver.png",
+  bomber: "assets/bomber.png",
+  engineer: "assets/engineer.png",
+  batter: "assets/batter.png",
+  sedan: "assets/sedan.png",           // 차량 4종 (드라이버 출격)
+  bike: "assets/bike.png",
+  truck: "assets/truck.png",
+  bus: "assets/bus.png",
 };
 const IMAGES = {};
 function preloadAssets(callback) {
@@ -1264,13 +1276,13 @@ function draw() {
     for (let r = 0; r < 2; r++) for (let c = 0; c < 5; c++) {
       ctx.fillRect(W * 0.60 + c * (W * 0.062), 46 + r * 22, 14, 14);
     }
-    // 라벨
-    ctx.fillStyle = "rgba(200,190,160,0.45)";
-    ctx.font = "10px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("정문", W * 0.25, 104);
-    ctx.fillText("본관", W * 0.75, 104);
   }
+  // 라벨 (배경 이미지가 있어도 항상 표시)
+  ctx.fillStyle = "rgba(200,190,160,0.45)";
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("정문", W * 0.25, 104);
+  ctx.fillText("본관", W * 0.75, 104);
 
   // 바리케이드
   const hpRatio = Math.max(0, game.barricadeHp / CONFIG.barricadeMaxHp);
@@ -1294,8 +1306,9 @@ function draw() {
 
   // 차량 (형태만 다르고 판정은 동일)
   for (const car of game.cars) {
-    if (IMAGES.car) {
-      ctx.drawImage(IMAGES.car, car.x - 18, car.y - 30, 36, 60);
+    const cimg = IMAGES[car.kind];
+    if (cimg) {
+      ctx.drawImage(cimg, car.x - 18, car.y - 30, 36, 60);
     } else if (car.kind === "bike") {
       // 오토바이 (위에서 본 모습): 앞뒤 바퀴 + 차체 + 핸들바 + 라이더
       ctx.fillStyle = "#1f1f24";                                   // 앞바퀴
