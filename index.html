@@ -519,18 +519,31 @@ const COMPANION_DEFS = [
     id: "soccer", name: "축구부", color: "#d24038",
     recruitDesc: "축구공을 차서 벽에 튕기는 랠리 공격 — 공은 바리케이드에서 멈춤",
     mover: true,
-    initState: () => ({ dmg: 16, ballSpeed: 560, ballCount: 1, balls: [] }),
+    initState: () => ({ dmg: 16, ballSpeed: 560, ballCount: 1, balls: [], restSeq: 0 }),
     update(comp, dt) {
       const R = 7;   // 공 반지름
       // 공 개수 보충 (영입/여분의 공 직후): 발밑에 정지 상태로 생성
       while (comp.balls.length < comp.ballCount) {
-        comp.balls.push({ x: comp.x, y: CONFIG.barricadeY - R - 1, vx: 0, vy: 0, rest: true });
+        comp.balls.push({ x: comp.x, y: CONFIG.barricadeY - R - 1, vx: 0, vy: 0, rest: true, restAt: ++comp.restSeq });
       }
-      // 이동: 쫓아갈 공(정지된 공 우선)의 x로 — 기공사(350)의 60% = 210
-      const chase = comp.balls.find(b => b.rest) || comp.balls[0];
+      // ★ 쫓아갈 공 선택:
+      //   ① 정지한 공이 있으면 "먼저 바리케이드에 도착한" 공(restAt이 작은 것)
+      //   ② 없으면 도착 예상 시간(ETA)이 가장 짧은 공을 미리 마중
+      let chase = null;
+      const resting = comp.balls.filter(b => b.rest);
+      if (resting.length > 0) {
+        chase = resting.reduce((a, b) => (a.restAt < b.restAt ? a : b));
+      } else {
+        let best = Infinity;
+        for (const b of comp.balls) {
+          const eta = b.vy > 0 ? (CONFIG.barricadeY - b.y) / b.vy : Infinity;
+          if (eta < best) { best = eta; chase = b; }
+        }
+        if (!chase) chase = comp.balls[0];
+      }
       if (chase) {
         const dx = chase.x - comp.x;
-        const step = 210 * dt;
+        const step = 210 * dt;   // 기공사(350)의 60%
         if (Math.abs(dx) > step) comp.x += Math.sign(dx) * step;
         else comp.x = chase.x;
         comp.x = Math.max(40, Math.min(W - 40, comp.x));
@@ -538,7 +551,7 @@ const COMPANION_DEFS = [
       for (const ball of comp.balls) {
         if (ball.rest) {
           // 공에 도착하면 방어선에 가장 가까운 적을 향해 킥 (랠리!)
-          if (Math.abs(comp.x - ball.x) < 16 && game.zombies.length > 0) {
+          if (Math.abs(comp.x - ball.x) < 18 && game.zombies.length > 0) {
             let target = null;
             for (const z of game.zombies) if (!target || z.y > target.y) target = z;
             const a = Math.atan2(target.y - ball.y, target.x - ball.x);
@@ -555,9 +568,13 @@ const COMPANION_DEFS = [
         if (ball.x > W - R) { ball.x = W - R; ball.vx = -Math.abs(ball.vx); }
         if (ball.y < R)     { ball.y = R;     ball.vy = Math.abs(ball.vy); }
         // 바리케이드에 닿으면 딱 정지
+        // ★ 모서리 교착 방지: 축구부 발이 닿는 범위(x 42~378)로 공이 살짝 굴러 나옴
         if (ball.vy > 0 && ball.y >= CONFIG.barricadeY - R) {
           ball.y = CONFIG.barricadeY - R;
-          ball.vx = 0; ball.vy = 0; ball.rest = true;
+          ball.vx = 0; ball.vy = 0;
+          ball.x = Math.max(42, Math.min(W - 42, ball.x));
+          ball.rest = true;
+          ball.restAt = ++comp.restSeq;   // 도착 순번 기록 (2개 공 우선순위용)
         }
         // 경로상의 적 타격 (좀비별 짧은 쿨다운으로 중복 타격 방지)
         for (let j = game.zombies.length - 1; j >= 0; j--) {
