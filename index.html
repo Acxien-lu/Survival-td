@@ -3,11 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<!-- 홈화면 추가 시 주소창 없이 앱처럼 열리게 하는 메타 태그 -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0d10">
-<title>SURVIVAL TD — 세로 전투</title>
+<title>SURVIVAL TD</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -34,6 +33,7 @@
   }
   .util-btn.on { border-color: #c33b2e; color: #ff8a7a; }
 
+  /* ---- 카드 선택 ---- */
   #skill-overlay {
     position: absolute; inset: 0;
     background: rgba(5,6,8,0.84);
@@ -48,7 +48,7 @@
     background: linear-gradient(160deg, #1d232b, #12161b);
     border: 1px solid #3a4350; border-radius: 10px;
     padding: 13px 15px; cursor: pointer;
-    transition: transform .12s, border-color .12s;
+    transition: transform .12s;
   }
   .skill-card:active { transform: scale(0.97); }
   .skill-card.hero    { border-left: 4px solid #c33b2e; }
@@ -61,6 +61,7 @@
   .skill-card .name { color: #f0ece1; font-size: 16px; font-weight: 700; margin-top: 2px; }
   .skill-card .desc { color: #9aa3ad; font-size: 13px; margin-top: 3px; line-height: 1.4; }
 
+  /* ---- 시작 / 게임오버 ---- */
   #center-overlay {
     position: absolute; inset: 0;
     background: rgba(5,6,8,0.88);
@@ -85,43 +86,66 @@
     color: #e8e3d8; font-size: 22px; letter-spacing: 4px; z-index: 15;
   }
 
-  /* ---- 캠프 화면 (10웨이브마다) ---- */
-  #camp-overlay {
+  /* ---- 캠프 시설 패널 (마을회관 / 의무대 공용) ---- */
+  #facility-panel {
     position: absolute; inset: 0;
-    background: linear-gradient(180deg, #2a2118 0%, #17130d 100%);
+    background: rgba(5,6,8,0.8);
     display: none; flex-direction: column;
     justify-content: center; align-items: center;
-    gap: 14px; z-index: 18; text-align: center;
+    gap: 12px; z-index: 25; text-align: center;
   }
-  #camp-overlay .dawn { color: #d9a441; font-size: 22px; letter-spacing: 3px; font-weight: 700; }
-  #camp-overlay .dawn-sub { color: #8a8577; font-size: 13px; margin-bottom: 10px; }
-  .camp-panel {
-    width: min(330px, 88vw);
-    background: rgba(20, 24, 29, 0.85);
-    border: 1px solid #4a4030;
+  .fac-box {
+    width: min(320px, 86vw);
+    background: linear-gradient(160deg, #241e14, #17130d);
+    border: 1px solid #5a4c34;
     border-radius: 12px;
-    padding: 18px 16px;
+    padding: 20px 18px;
   }
-  .camp-panel h3 { color: #e8d9b8; font-size: 17px; margin-bottom: 4px; }
-  .camp-panel .info { color: #9aa3ad; font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
-  .camp-panel .kills { color: #d9a441; font-weight: 700; }
-  #camp-upgrade-btn {
+  .fac-box h3 { color: #e8d9b8; font-size: 19px; margin-bottom: 6px; }
+  .fac-box .desc { color: #9aa3ad; font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
+  .fac-box .kills { color: #d9a441; font-weight: 700; }
+  .fac-action {
     width: 100%;
     background: #6b5a3e; color: #f0ece1;
     border: 1px solid #8a7550; border-radius: 8px;
     font-size: 15px; font-weight: 700;
     padding: 12px; cursor: pointer;
   }
-  #camp-upgrade-btn:disabled { opacity: 0.4; }
-  #camp-upgrade-btn:active:not(:disabled) { transform: scale(0.97); }
-  #camp-depart-btn {
-    background: #c33b2e; color: #fff; border: none;
-    font-size: 16px; font-weight: 700; letter-spacing: 2px;
-    padding: 13px 46px; border-radius: 8px; cursor: pointer;
-    margin-top: 4px;
+  .fac-action:disabled { opacity: 0.4; }
+  .fac-action:active:not(:disabled) { transform: scale(0.97); }
+  .fac-close {
+    background: none; border: none;
+    color: #8a8577; font-size: 14px;
+    padding: 10px; cursor: pointer; text-decoration: underline;
   }
-  #camp-depart-btn:active { transform: scale(0.96); }
-  .camp-note { color: #7a746a; font-size: 12px; line-height: 1.6; padding: 0 26px; }
+
+  /* ---- 숙소: 동료 교체 ---- */
+  #lodge-panel {
+    position: absolute; inset: 0;
+    background: rgba(5,6,8,0.85);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    gap: 10px; z-index: 25;
+  }
+  #lodge-panel h3 { color: #e8d9b8; font-size: 19px; }
+  #lodge-panel .hint { color: #8a8577; font-size: 12px; margin-bottom: 4px; }
+  .lodge-section {
+    width: min(330px, 88vw);
+    background: rgba(20,24,29,0.9);
+    border: 1px solid #4a4030; border-radius: 12px;
+    padding: 12px;
+  }
+  .lodge-section .sec-title { color: #d9a441; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .roster-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #1d232b; border: 1px solid #3a4350; border-radius: 8px;
+    padding: 9px 12px; margin-bottom: 6px; cursor: pointer;
+  }
+  .roster-row:active { transform: scale(0.98); }
+  .roster-row .rname { color: #f0ece1; font-size: 14px; font-weight: 700; }
+  .roster-row .rlv { color: #6fa3d4; font-size: 12px; }
+  .roster-row .rmove { color: #8a8577; font-size: 11px; }
+  .roster-empty { color: #5a5548; font-size: 12px; padding: 6px 2px; }
 </style>
 </head>
 <body>
@@ -135,30 +159,35 @@
 
   <div id="pause-badge">PAUSED</div>
 
-  <!-- 캠프 화면: 10웨이브마다 등장 -->
-  <div id="camp-overlay">
-    <div class="dawn">☀ 날이 밝았다</div>
-    <div class="dawn-sub">생존자들이 캠프로 복귀합니다</div>
-    <div class="camp-panel">
-      <h3>🏛 마을 회관</h3>
-      <div class="info">
-        보유 킬: <span class="kills" id="camp-kills">0</span><br>
-        부대 공격력: <span class="kills" id="camp-atk">+0%</span>
-      </div>
-      <button id="camp-upgrade-btn">공격력 업그레이드 (+20%) — 3킬</button>
-    </div>
-    <div class="camp-note">
-      바리케이드가 수리되었습니다.<br>
-      출정 시 전투 강화(카드)는 초기화되지만,<br>
-      <b style="color:#6fa3d4">동료</b>와 <b style="color:#d9a441">마을 회관 업그레이드</b>는 유지됩니다.
-    </div>
-    <button id="camp-depart-btn">출정</button>
-  </div>
-
   <div id="skill-overlay">
     <h2>WAVE CLEAR</h2>
     <div class="sub">하나를 선택하세요</div>
     <div id="skill-cards"></div>
+  </div>
+
+  <!-- 마을회관 / 의무대 공용 패널 (내용은 JS가 채움) -->
+  <div id="facility-panel">
+    <div class="fac-box">
+      <h3 id="fac-title"></h3>
+      <div class="desc" id="fac-desc"></div>
+      <button class="fac-action" id="fac-action"></button>
+      <button class="fac-close" id="fac-close">닫기</button>
+    </div>
+  </div>
+
+  <!-- 숙소 패널: 동료 교체 -->
+  <div id="lodge-panel">
+    <h3>🛏 숙소</h3>
+    <div class="hint">탭해서 출전 ↔ 대기 전환 (출전 최대 4명)</div>
+    <div class="lodge-section">
+      <div class="sec-title">출전 중 (<span id="deploy-count">0</span>/4)</div>
+      <div id="deployed-list"></div>
+    </div>
+    <div class="lodge-section">
+      <div class="sec-title">대기 중</div>
+      <div id="reserve-list"></div>
+    </div>
+    <button class="fac-close" id="lodge-close">닫기</button>
   </div>
 
   <div id="center-overlay">
@@ -166,7 +195,7 @@
     <p id="center-text">
       위에서 몰려오는 &lt;놈들&gt;로부터 바리케이드를 지켜라.<br>
       드래그로 주인공을 <b>좌우</b>로 이동.<br>
-      웨이브를 넘기며 <b style="color:#d9a441">동료를 영입</b>하고 강화하세요.
+      <b style="color:#d9a441">동료를 영입</b>하고, 10웨이브마다 캠프에서 정비하세요.
     </p>
     <button id="start-btn">전투 시작</button>
   </div>
@@ -175,18 +204,10 @@
 <script>
 /* ================================================================
    [0] 에셋 교체 지점 — 경로만 넣으면 도형 대신 이미지로 그립니다.
-   GitHub에 올릴 때 assets 폴더를 만들어 png를 넣고
-   예: player: "assets/player.png" 처럼 상대 경로로 적으면 됩니다.
    ================================================================ */
 const ASSET_URLS = {
-  player: "",
-  zombie: "",
-  zombieBig: "",
-  bullet: "",
-  background: "",
-  sniper: "",
-  medic: "",
-  driver: "",
+  player: "", zombie: "", zombieBig: "", bullet: "", background: "",
+  sniper: "", medic: "", driver: "", bomber: "", engineer: "", batter: "",
   car: "",
 };
 const IMAGES = {};
@@ -205,62 +226,63 @@ function preloadAssets(callback) {
 }
 
 /* ================================================================
-   [1] 기본 설정 — 세로 방향 좌표계
-   적: 화면 위(y=-30)에서 스폰 → 아래로 전진
-   바리케이드: 가로선 (y = barricadeY)
-   주인공: 바리케이드 아래에서 좌우 이동
+   [1] 기본 설정
+   ★ 물량전 개편: 적 수 5배 / 이동속도 절반.
+     총 난이도가 폭증하지 않도록 개별 체력은 1/3,
+     바리케이드 피해도 낮췄습니다. (물량으로 밀려오는 맛)
    ================================================================ */
 const CONFIG = {
   logicalWidth: 420,
   logicalHeight: 740,
-  barricadeY: 580,          // 방어선의 세로 위치
-  playerY: 636,             // 주인공의 고정 세로 위치 (방어선 아래)
+  barricadeY: 580,
+  playerY: 636,
   barricadeMaxHp: 150,
   baseFireInterval: 0.45,
   baseDamage: 12,
   baseBulletSpeed: 540,
   wavesPerRun: 30,
+  maxDeployed: 4,          // 출전 동료 제한
+  maxMultishot: 5,         // 주인공 부채꼴 최대 5발
 };
+const W = CONFIG.logicalWidth, H = CONFIG.logicalHeight;
 
 /* ================================================================
-   [2] 동료 정의 — 이제 방어선 아래에 가로로 늘어섭니다 (xRatio)
+   [2] 동료 정의 — 6종
+   ----------------------------------------------------------------
+   각 동료: 고유 행동(update) + 강화 카드(maxLv 제한).
+   comp.upLv[i] 로 각 강화의 현재 레벨을 추적하고,
+   maxLv에 도달한 카드는 더 이상 뽑히지 않습니다.
+   mover: true 인 동료는 가로로 뛰어다닙니다.
    ================================================================ */
 const COMPANION_DEFS = [
   {
-    id: "sniper",
-    name: "저격수",
-    recruitDesc: "가장 체력이 높은 적을 노리는 강력한 한 발 (2.2초마다)",
-    color: "#8e6fae",
-    xRatio: 0.18,
-    initState: () => ({ level: 1, cooldown: 0, dmgMul: 1, rateMul: 1 }),
+    id: "sniper", name: "저격수", color: "#8e6fae",
+    recruitDesc: "가장 체력 높은 적 저격 (2.2초, 기본 2관통)",
+    initState: () => ({ cooldown: 0, dmgMul: 1, pierce: 2 }),
     update(comp, dt) {
       comp.cooldown -= dt;
       if (comp.cooldown > 0 || game.zombies.length === 0) return;
       let target = game.zombies[0];
       for (const z of game.zombies) if (z.hp > target.hp) target = z;
-      const x = comp.x, y = CONFIG.playerY;
-      const a = Math.atan2(target.y - y, target.x - x);
+      const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
       game.bullets.push({
-        x, y: y - 14,
-        vx: Math.cos(a) * 780, vy: Math.sin(a) * 780,
-        hitsLeft: 2,
+        x: comp.x, y: CONFIG.playerY - 14,
+        vx: Math.cos(a) * 1560, vy: Math.sin(a) * 1560,   // ★ 투사체 속도 2배
+        hitsLeft: comp.pierce,
         damage: 30 * comp.dmgMul,
         sniper: true,
       });
-      comp.cooldown = 2.2 / comp.rateMul;
+      comp.cooldown = 2.2;
     },
     upgrades: [
-      { name: "저격수: 대물 저격총", desc: "저격 피해 +55%",            apply: c => c.dmgMul *= 1.55 },
-      { name: "저격수: 속사 훈련",   desc: "저격 간격 -25%",            apply: c => c.rateMul *= 1.35 },
+      { name: "저격수: 대물 저격총", desc: "저격 피해 +55%", maxLv: 5, apply: c => c.dmgMul *= 1.55 },
+      { name: "저격수: 철갑탄",     desc: "관통 +1",        maxLv: 3, apply: c => c.pierce += 1 },
     ],
   },
   {
-    id: "medic",
-    name: "의무병",
-    recruitDesc: "5초마다 바리케이드를 6 회복",
-    color: "#5b9e7d",
-    xRatio: 0.82,
-    initState: () => ({ level: 1, cooldown: 5, healAmt: 6, interval: 5 }),
+    id: "medic", name: "의무병", color: "#5b9e7d",
+    recruitDesc: "5초마다 바리케이드 6 회복",
+    initState: () => ({ cooldown: 5, healAmt: 6, interval: 5 }),
     update(comp, dt) {
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
@@ -271,42 +293,165 @@ const COMPANION_DEFS = [
       comp.cooldown = comp.interval;
     },
     upgrades: [
-      { name: "의무병: 붕대 보급",   desc: "회복량 +6",                 apply: c => c.healAmt += 6 },
-      { name: "의무병: 신속 처치",   desc: "회복 간격 -1초 (최소 2초)",  apply: c => c.interval = Math.max(2, c.interval - 1) },
+      { name: "의무병: 붕대 보급", desc: "회복량 +6",               maxLv: 5, apply: c => c.healAmt += 6 },
+      { name: "의무병: 신속 처치", desc: "회복 간격 -1초 (최소 2초)", maxLv: 3, apply: c => c.interval = Math.max(2, c.interval - 1) },
     ],
   },
   {
-    id: "driver",
-    name: "드라이버",
-    recruitDesc: "10초마다 차량 돌진 — 경로의 모든 적에게 35 피해",
-    color: "#c9884a",
-    xRatio: 0.5,
-    initState: () => ({ level: 1, cooldown: 4, dmg: 35, interval: 10 }),
+    id: "driver", name: "드라이버", color: "#c9884a",
+    recruitDesc: "10초마다 차량 출격, 경로의 적 격파 (증편 가능)",
+    initState: () => ({ cooldown: 4, dmg: 35, interval: 10, fleet: 1, launchQueue: 0, launchTimer: 0 }),
     update(comp, dt) {
       comp.cooldown -= dt;
-      if (comp.cooldown > 0) return;
-      // 적이 가장 몰린 x 지점(평균)으로 위를 향해 돌진
-      let x = CONFIG.logicalWidth / 2;
-      if (game.zombies.length > 0) {
-        x = game.zombies.reduce((s, z) => s + z.x, 0) / game.zombies.length;
+      // 쿨이 돌면 보유 차량 수만큼 출격 대기열에 올림
+      if (comp.cooldown <= 0) {
+        comp.launchQueue = comp.fleet;
+        comp.launchTimer = 0;
+        comp.cooldown = comp.interval;
       }
-      game.cars.push({ x, y: CONFIG.barricadeY - 20, speed: 420, dmg: comp.dmg, id: ++game.carSeq });
-      comp.cooldown = comp.interval;
+      // 대기열의 차량을 0.35초 간격으로 한 대씩, 서로 다른 타겟을 향해 발진
+      if (comp.launchQueue > 0) {
+        comp.launchTimer -= dt;
+        if (comp.launchTimer <= 0 && game.zombies.length > 0) {
+          // (보유차량-대기열)번째로 방어선에 가까운 적을 타겟으로 → 차마다 다른 적
+          const sorted = [...game.zombies].sort((a, b) => b.y - a.y);
+          const idx = Math.min(comp.fleet - comp.launchQueue, sorted.length - 1);
+          game.cars.push({ x: sorted[idx].x, y: CONFIG.barricadeY - 20, speed: 420, dmg: comp.dmg, id: ++game.carSeq });
+          comp.launchQueue--;
+          comp.launchTimer = 0.35;
+        }
+      }
     },
     upgrades: [
-      { name: "드라이버: 강판 개조", desc: "차량 피해 +30",             apply: c => c.dmg += 30 },
-      { name: "드라이버: 정비 숙련", desc: "차량 간격 -2초 (최소 4초)",  apply: c => c.interval = Math.max(4, c.interval - 2) },
+      { name: "드라이버: 차량 증편", desc: "차량 +1대 (최대 5대)", maxLv: 4, apply: c => c.fleet += 1 },
+      { name: "드라이버: 강판 개조", desc: "차량 피해 +30",        maxLv: 5, apply: c => c.dmg += 30 },
+    ],
+  },
+  {
+    id: "bomber", name: "폭탄병", color: "#b5533c",
+    recruitDesc: "폭탄 투척 — 첫 명중 지점에 범위 피해 (2.5초)",
+    initState: () => ({ cooldown: 1, dmg: 18, radiusLv: 0 }),
+    update(comp, dt) {
+      comp.cooldown -= dt;
+      if (comp.cooldown > 0 || game.zombies.length === 0) return;
+      let target = null;
+      for (const z of game.zombies) if (!target || z.y > target.y) target = z;
+      const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
+      // 폭발 범위: 기본 W/6, 렙업마다 커져서 3렙(맥스)에 W/4
+      const radius = W / 6 + (W / 4 - W / 6) * (comp.radiusLv / 3);
+      game.bullets.push({
+        x: comp.x, y: CONFIG.playerY - 14,
+        vx: Math.cos(a) * 430, vy: Math.sin(a) * 430,
+        hitsLeft: 1, damage: comp.dmg,
+        bomb: true, radius,
+      });
+      comp.cooldown = 2.5;
+    },
+    upgrades: [
+      { name: "폭탄병: 확장 폭약", desc: "폭발 범위 확대 (3렙 맥스)", maxLv: 3, apply: c => c.radiusLv += 1 },
+      { name: "폭탄병: 고성능 화약", desc: "폭발 피해 +50%",          maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.5) },
+    ],
+  },
+  {
+    id: "engineer", name: "기공사", color: "#5aa8c9",
+    recruitDesc: "좌우로 뛰며 전방 직선 사격 (사거리: 화면 세로 절반)",
+    mover: true,
+    initState: () => ({ cooldown: 0, dmg: 8, chainLv: 0, dir: 1 }),
+    update(comp, dt) {
+      // 이동: 주인공 초기 탄속(540)과 같은 속도로 좌우 왕복
+      comp.x += comp.dir * 540 * dt;
+      if (comp.x < 40) { comp.x = 40; comp.dir = 1; }
+      if (comp.x > W - 40) { comp.x = W - 40; comp.dir = -1; }
+      // 공격: 전방(위) 직선상, 사거리 H/2 이내의 가장 가까운 적
+      comp.cooldown -= dt;
+      if (comp.cooldown > 0) return;
+      let target = null;
+      for (const z of game.zombies) {
+        if (Math.abs(z.x - comp.x) < 22 && z.y < CONFIG.playerY && CONFIG.playerY - z.y < H / 2) {
+          if (!target || z.y > target.y) target = z;   // 제일 가까운(아래쪽) 적
+        }
+      }
+      if (!target) return;
+      // 명중 + 체인: 근처(W/4 이내)의 다른 적에게 튕김
+      const hits = [target];
+      let cur = target;
+      for (let c = 0; c < comp.chainLv; c++) {
+        let next = null, bestD = (W / 4) * (W / 4);
+        for (const z of game.zombies) {
+          if (hits.includes(z)) continue;
+          const dx = z.x - cur.x, dy = z.y - cur.y, d2 = dx * dx + dy * dy;
+          if (d2 < bestD) { bestD = d2; next = z; }
+        }
+        if (!next) break;
+        hits.push(next);
+        cur = next;
+      }
+      // 체인 라인 이펙트 기록 후 피해 적용
+      const pts = [{ x: comp.x, y: CONFIG.playerY - 14 }, ...hits.map(z => ({ x: z.x, y: z.y }))];
+      game.effects.push({ type: "chain", pts, life: 0.12 });
+      for (const z of hits) {
+        z.hp -= comp.dmg;
+        spawnParticles(z.x, z.y, "#5aa8c9", 3);
+      }
+      // 죽은 적 정리 (뒤에서부터)
+      for (let j = game.zombies.length - 1; j >= 0; j--) {
+        if (game.zombies[j].hp <= 0) killZombie(j);
+      }
+      comp.cooldown = 0.35;
+    },
+    upgrades: [
+      { name: "기공사: 전격 체인", desc: "공격이 근처 적 1명에게 추가로 튕김 (3렙 맥스)", maxLv: 3, apply: c => c.chainLv += 1 },
+      { name: "기공사: 과부하",   desc: "피해 +40%",                                     maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
+    ],
+  },
+  {
+    id: "batter", name: "야구부", color: "#d4c05a",
+    recruitDesc: "좌우로 뛰며 범위 내 적을 강타 — 방어선에 가까운 적일수록 아픔",
+    mover: true,
+    initState: () => ({ cooldown: 0, dmg: 22, rangeLv: 0, dir: -1 }),
+    update(comp, dt) {
+      comp.x += comp.dir * 540 * dt;
+      if (comp.x < 40) { comp.x = 40; comp.dir = 1; }
+      if (comp.x > W - 40) { comp.x = W - 40; comp.dir = -1; }
+      comp.cooldown -= dt;
+      if (comp.cooldown > 0) return;
+      // 스윙 범위: 기본 H/5 → 1렙 H/4 → 2렙(맥스) H/3
+      const range = comp.rangeLv === 0 ? H / 5 : comp.rangeLv === 1 ? H / 4 : H / 3;
+      const r2 = range * range;
+      let swung = false;
+      for (let j = game.zombies.length - 1; j >= 0; j--) {
+        const z = game.zombies[j];
+        const dx = z.x - comp.x, dy = z.y - CONFIG.playerY;
+        if (dx * dx + dy * dy < r2) {
+          // 방어선에 가까울수록 피해 증가, 최대 2배
+          const mult = 1 + Math.min(1, Math.max(0, z.y / CONFIG.barricadeY));
+          z.hp -= comp.dmg * mult;
+          z.y -= 14;   // 방망이에 맞으면 밀려남
+          spawnParticles(z.x, z.y, "#d4c05a", 4);
+          if (z.hp <= 0) killZombie(j);
+          swung = true;
+        }
+      }
+      if (swung) {
+        game.effects.push({ type: "swing", x: comp.x, y: CONFIG.playerY, r: range, life: 0.18 });
+        comp.cooldown = 0.7;
+      }
+    },
+    upgrades: [
+      { name: "야구부: 긴 배트", desc: "스윙 범위 확대 (2렙 맥스: 세로 1/4 → 1/3)", maxLv: 2, apply: c => c.rangeLv += 1 },
+      { name: "야구부: 강타",   desc: "타격 피해 +40%",                            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
     ],
   },
 ];
 
 /* ================================================================
-   [3] 주인공 스킬 풀
+   [3] 주인공 스킬 풀 — 더블 샷은 총 5발에서 맥스
    ================================================================ */
 const HERO_SKILLS = [
   { name: "속사",       desc: "공격 속도 +35%",             apply: s => s.fireRateMul *= 1.35 },
   { name: "고화력 탄환", desc: "공격력 +45%",                apply: s => s.damageMul *= 1.45 },
-  { name: "더블 샷",     desc: "발사 탄환 +1 (부채꼴)",       apply: s => s.multishot += 1 },
+  { name: "더블 샷",     desc: "발사 탄환 +1 (최대 5발)",     apply: s => s.multishot += 1,
+    available: s => s.multishot < CONFIG.maxMultishot },
   { name: "관통탄",      desc: "탄환이 적 1명을 추가 관통",    apply: s => s.pierce += 1 },
   { name: "넉백 강화",   desc: "명중 시 적을 밀어냄 +10",      apply: s => s.knockback += 10 },
   { name: "응급 수리",   desc: "바리케이드 HP 60 회복",       apply: (s, g) => g.barricadeHp = Math.min(CONFIG.barricadeMaxHp, g.barricadeHp + 60) },
@@ -321,7 +466,6 @@ let game, stats;
 let gameSpeed = 1;
 let pausedByHide = false;
 
-// 주인공의 전투 강화(카드로 얻은 것)만 초기화 — 캠프 출정 시에도 호출됩니다.
 function resetHeroStats() {
   stats = { fireRateMul: 1, damageMul: 1, multishot: 1, pierce: 0, knockback: 0, thorns: 0 };
 }
@@ -329,33 +473,38 @@ function resetHeroStats() {
 function resetGame() {
   resetHeroStats();
   game = {
+    state: "battle",     // "battle" | "camp"
     running: false,
     wave: 0,
-    campAtk: 0,         // 마을 회관 공격력 업그레이드 레벨 (한 판 내내 유지)
+    campAtk: 0,
     barricadeHp: CONFIG.barricadeMaxHp,
-    playerX: CONFIG.logicalWidth / 2,   // ★ 이제 x가 움직입니다
+    playerX: W / 2,
     fireCooldown: 0,
     bullets: [],
     zombies: [],
     cars: [],
     carSeq: 0,
-    companions: [],
+    companions: [],      // 출전 중 (최대 4)
+    reserve: [],         // 숙소 대기
     spawnQueue: 0,
     spawnTimer: 0,
     killCount: 0,
     hitFlash: 0,
     particles: [],
+    effects: [],         // 체인/폭발/스윙 이펙트
   };
 }
 
+// 출전 동료들의 자리(x)를 다시 배정 — 뛰어다니는 동료는 시작 위치만 받음
+const SLOT_X = [0.15, 0.38, 0.62, 0.85];
+function assignSlots() {
+  game.companions.forEach((comp, i) => {
+    comp.x = W * SLOT_X[i % SLOT_X.length];
+  });
+}
+
 /* ================================================================
-   [5] 웨이브
-   ----------------------------------------------------------------
-   ★ 난이도 지수(diff)와 웨이브 번호를 분리했습니다.
-   1~10웨이브:  diff = 웨이브 그대로 (1~10)
-   11~20웨이브: diff = 웨이브 - 6  (11웨이브 = 5단계 수준부터 재상승)
-   21~30웨이브: diff = 웨이브 - 11 (21웨이브 = 10단계 수준부터 재상승)
-   → 캠프에서 강화가 초기화되어도 다시 성장할 시간을 주는 구조입니다.
+   [5] 웨이브 — 챕터별 난이도 재시작 (11웨이브=5단계, 21웨이브=10단계)
    ================================================================ */
 function diffOf(n) {
   if (n <= 10) return n;
@@ -366,21 +515,21 @@ function diffOf(n) {
 function startWave(n) {
   game.wave = n;
   const d = diffOf(n);
-  game.spawnQueue = Math.floor(3 + d * 1.3);
-  game.spawnTimer = 0.5;
+  game.spawnQueue = Math.floor(3 + d * 1.3) * 5;   // ★ 적 수 5배
+  game.spawnTimer = 0.3;
 }
 
 function spawnZombie() {
-  const d = diffOf(game.wave);   // 웨이브 번호가 아닌 "난이도 지수" 사용
-  // 대형 좀비: 난이도 4부터, 확률이 서서히 증가 (최대 22%)
+  const d = diffOf(game.wave);
   const big = d >= 4 && Math.random() < Math.min(0.22, 0.05 + d * 0.005);
-  const hpBase = Math.round(14 + d * 3 + d * d * 0.15);
+  // ★ 물량전이므로 개별 체력은 1/3 (총 체력은 기존보다 약 1.7배 → 광역기의 존재 이유)
+  const hpBase = Math.max(4, Math.round((14 + d * 3 + d * d * 0.15) / 3));
   game.zombies.push({
-    x: 45 + Math.random() * (CONFIG.logicalWidth - 90),  // 가로 위치는 무작위
-    y: -30,                                              // 화면 위에서 등장
+    x: 45 + Math.random() * (W - 90),
+    y: -30 - Math.random() * 40,
     hp:    big ? hpBase * 3 : hpBase,
     maxHp: big ? hpBase * 3 : hpBase,
-    speed: Math.min(90, (big ? 24 : 38) + d * 0.5 + Math.random() * 10),
+    speed: Math.min(45, (big ? 12 : 19) + d * 0.25 + Math.random() * 5),   // ★ 이동속도 절반
     size:  big ? 30 : 17,
     big,
     attackTimer: 0,
@@ -390,31 +539,41 @@ function spawnZombie() {
 }
 
 /* ================================================================
-   [6] 캔버스 / 입력 — 이제 드래그로 "좌우" 이동
+   [6] 캔버스 / 입력
    ================================================================ */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 let scale = 1;
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  scale = Math.min(window.innerWidth / CONFIG.logicalWidth, window.innerHeight / CONFIG.logicalHeight);
-  canvas.style.width  = CONFIG.logicalWidth * scale + "px";
-  canvas.style.height = CONFIG.logicalHeight * scale + "px";
-  canvas.width  = CONFIG.logicalWidth * scale * dpr;
-  canvas.height = CONFIG.logicalHeight * scale * dpr;
+  scale = Math.min(window.innerWidth / W, window.innerHeight / H);
+  canvas.style.width  = W * scale + "px";
+  canvas.style.height = H * scale + "px";
+  canvas.width  = W * scale * dpr;
+  canvas.height = H * scale * dpr;
   ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-let dragging = false;
-function onPointerDown(e) { dragging = true; onPointerMove(e); }
-function onPointerMove(e) {
-  if (!dragging || !game.running) return;
+function pointerLogical(e) {
   const rect = canvas.getBoundingClientRect();
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  const x = (clientX - rect.left) / scale;
-  game.playerX = Math.max(40, Math.min(CONFIG.logicalWidth - 40, x));
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: (cx - rect.left) / scale, y: (cy - rect.top) / scale };
+}
+
+let dragging = false;
+function onPointerDown(e) {
+  const p = pointerLogical(e);
+  if (game.state === "camp") { campTap(p.x, p.y); return; }
+  dragging = true;
+  onPointerMove(e);
+}
+function onPointerMove(e) {
+  if (!dragging || !game.running || game.state !== "battle") return;
+  const p = pointerLogical(e);
+  game.playerX = Math.max(40, Math.min(W - 40, p.x));
 }
 function onPointerUp() { dragging = false; }
 canvas.addEventListener("mousedown", onPointerDown);
@@ -425,7 +584,7 @@ canvas.addEventListener("touchmove", onPointerMove, { passive: true });
 window.addEventListener("touchend", onPointerUp);
 
 /* ================================================================
-   [7] 편의 기능 (2배속 / 전체화면 / 자동 일시정지)
+   [7] 편의 기능
    ================================================================ */
 const speedBtn = document.getElementById("speed-btn");
 speedBtn.onclick = () => {
@@ -435,11 +594,8 @@ speedBtn.onclick = () => {
 };
 const fsBtn = document.getElementById("fs-btn");
 fsBtn.onclick = () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {});
-  } else {
-    document.exitFullscreen();
-  }
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  else document.exitFullscreen();
 };
 const pauseBadge = document.getElementById("pause-badge");
 document.addEventListener("visibilitychange", () => {
@@ -449,59 +605,58 @@ document.addEventListener("visibilitychange", () => {
 pauseBadge.onclick = () => { pausedByHide = false; pauseBadge.style.display = "none"; };
 
 /* ================================================================
-   [8] 업데이트
+   [8] 업데이트 (전투)
    ================================================================ */
 function update(dt) {
-  // 스폰
+  // 스폰 — 물량전이라 간격도 1/5
   if (game.spawnQueue > 0) {
     game.spawnTimer -= dt;
     if (game.spawnTimer <= 0) {
       spawnZombie();
       game.spawnQueue--;
-      game.spawnTimer = Math.max(0.3, 1.3 - diffOf(game.wave) * 0.03);
+      game.spawnTimer = Math.max(0.06, (1.3 - diffOf(game.wave) * 0.03) / 5);
     }
   }
 
-  // ★ 주인공 자동 공격: "매 발사 직전마다" 타겟을 새로 계산합니다.
-  //   기준 = 방어선(y)에 가장 근접한 적 (즉 y가 가장 큰 적).
-  //   탄환은 발사 후 직진하지만, 다음 발은 그 시점의 최근접 적을
-  //   다시 골라 쏘기 때문에 위협 순서대로 처리됩니다.
+  // 주인공 자동 공격: 매 발사마다 방어선 최근접 적을 다시 조준
   game.fireCooldown -= dt;
   if (game.fireCooldown <= 0 && game.zombies.length > 0) {
     let target = null;
-    for (const z of game.zombies) {
-      if (!target || z.y > target.y) target = z;  // 방어선에 제일 가까운 적
-    }
+    for (const z of game.zombies) if (!target || z.y > target.y) target = z;
     fireAt(target);
     game.fireCooldown = CONFIG.baseFireInterval / stats.fireRateMul;
   }
 
-  // 동료 행동
+  // 동료 행동 (출전 중인 4명만)
   for (const comp of game.companions) comp.def.update(comp, dt);
 
   // 탄환
   for (let i = game.bullets.length - 1; i >= 0; i--) {
     const b = game.bullets[i];
     b.x += b.vx * dt; b.y += b.vy * dt;
-    if (b.y < -40 || b.x < -40 || b.x > CONFIG.logicalWidth + 40) {
+    if (b.y < -40 || b.x < -40 || b.x > W + 40) {
       game.bullets.splice(i, 1); continue;
     }
     for (let j = game.zombies.length - 1; j >= 0; j--) {
       const z = game.zombies[j];
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx * dx + dy * dy < (z.size + 5) * (z.size + 5)) {
-        // 데미지 공식: 기본 x 카드 배율 x 마을 회관 공업(+20%/레벨)
-        z.hp -= b.damage !== undefined ? b.damage : CONFIG.baseDamage * stats.damageMul * (1 + 0.2 * game.campAtk);
-        z.y -= stats.knockback;   // 넉백: 위로 밀어냄
-        spawnParticles(z.x, z.y, "#c33b2e", 3);
-        if (--b.hitsLeft <= 0) game.bullets.splice(i, 1);
-        if (z.hp <= 0) killZombie(j);
+        if (b.bomb) {
+          explode(b.x, b.y, b.radius, b.damage);
+          game.bullets.splice(i, 1);
+        } else {
+          z.hp -= b.damage !== undefined ? b.damage : CONFIG.baseDamage * stats.damageMul * (1 + 0.2 * game.campAtk);
+          z.y -= stats.knockback;
+          spawnParticles(z.x, z.y, "#c33b2e", 2);
+          if (--b.hitsLeft <= 0) game.bullets.splice(i, 1);
+          if (z.hp <= 0) killZombie(j);
+        }
         break;
       }
     }
   }
 
-  // 차량: 아래→위로 돌진
+  // 차량: 아래→위 돌진
   for (let i = game.cars.length - 1; i >= 0; i--) {
     const car = game.cars[i];
     car.y -= car.speed * dt;
@@ -512,14 +667,14 @@ function update(dt) {
         z.lastCarId = car.id;
         z.hp -= car.dmg;
         z.y -= 20;
-        spawnParticles(z.x, z.y, "#c9884a", 6);
+        spawnParticles(z.x, z.y, "#c9884a", 4);
         if (z.hp <= 0) killZombie(j);
       }
     }
     if (car.y < -60) game.cars.splice(i, 1);
   }
 
-  // 좀비: 아래(방어선)로 전진
+  // 좀비 전진
   for (let i = game.zombies.length - 1; i >= 0; i--) {
     const z = game.zombies[i];
     z.wobble += dt * 7;
@@ -528,8 +683,8 @@ function update(dt) {
     } else {
       z.attackTimer -= dt;
       if (z.attackTimer <= 0) {
-        game.barricadeHp -= z.big ? 6 : 2;
-        game.hitFlash = 0.25;
+        game.barricadeHp -= z.big ? 4 : 1;   // 물량전이라 개별 피해 하향
+        game.hitFlash = 0.2;
         z.attackTimer = 1.0;
         if (stats.thorns > 0) {
           z.hp -= 6 * stats.thorns;
@@ -539,11 +694,15 @@ function update(dt) {
     }
   }
 
-  // 파티클 / 플래시
+  // 파티클 / 이펙트 / 플래시
   for (let i = game.particles.length - 1; i >= 0; i--) {
     const p = game.particles[i];
     p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
     if (p.life <= 0) game.particles.splice(i, 1);
+  }
+  for (let i = game.effects.length - 1; i >= 0; i--) {
+    game.effects[i].life -= dt;
+    if (game.effects[i].life <= 0) game.effects.splice(i, 1);
   }
   if (game.hitFlash > 0) game.hitFlash -= dt;
 
@@ -552,10 +711,22 @@ function update(dt) {
   if (game.spawnQueue === 0 && game.zombies.length === 0) {
     if (game.wave >= CONFIG.wavesPerRun) { endGame(true); return; }
     game.running = false;
-    if (game.wave % 10 === 0) {
-      showCamp();          // 10, 20웨이브 클리어 → 캠프 복귀
-    } else {
-      showCardChoices();
+    if (game.wave % 10 === 0) enterCamp();
+    else showCardChoices();
+  }
+}
+
+// 폭탄병의 폭발: 반경 내 모든 적에게 피해
+function explode(x, y, radius, dmg) {
+  game.effects.push({ type: "boom", x, y, r: radius, life: 0.25 });
+  const r2 = radius * radius;
+  for (let j = game.zombies.length - 1; j >= 0; j--) {
+    const z = game.zombies[j];
+    const dx = z.x - x, dy = z.y - y;
+    if (dx * dx + dy * dy < r2) {
+      z.hp -= dmg;
+      spawnParticles(z.x, z.y, "#b5533c", 3);
+      if (z.hp <= 0) killZombie(j);
     }
   }
 }
@@ -578,27 +749,34 @@ function fireAt(target) {
 
 function killZombie(index) {
   const z = game.zombies[index];
-  spawnParticles(z.x, z.y, z.big ? "#7a9e4f" : "#5b7d3c", 10);
+  spawnParticles(z.x, z.y, z.big ? "#7a9e4f" : "#5b7d3c", 6);
   game.zombies.splice(index, 1);
   game.killCount++;
 }
 
 function spawnParticles(x, y, color, count) {
+  // 물량전이라 파티클 총량 제한 (성능 보호)
+  if (game.particles.length > 250) return;
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2;
     const sp = 40 + Math.random() * 120;
-    game.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3 + Math.random() * 0.25, color });
+    game.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.25 + Math.random() * 0.2, color });
   }
 }
 
 /* ================================================================
-   [9] 카드 시스템 (영입 / 동료 강화 / 주인공)
+   [9] 카드 시스템
+   - 영입: 미보유 동료 (보유 = 출전 + 대기)
+   - 강화: 보유 동료의 카드 중 maxLv 미달인 것만
+   - 주인공: available 조건(더블샷 5발 제한 등) 충족 카드만
    ================================================================ */
+function allOwned() { return [...game.companions, ...game.reserve]; }
+
 function buildCardPool() {
   const recruits = [];
   const others = [];
   for (const def of COMPANION_DEFS) {
-    const owned = game.companions.find(c => c.def.id === def.id);
+    const owned = allOwned().find(c => c.def.id === def.id);
     if (!owned) {
       recruits.push({
         tag: "동료 영입", cls: "recruit",
@@ -607,16 +785,18 @@ function buildCardPool() {
         apply: () => recruitCompanion(def),
       });
     } else {
-      for (const up of def.upgrades) {
+      def.upgrades.forEach((up, i) => {
+        if (owned.upLv[i] >= up.maxLv) return;   // 맥스 도달 카드는 제외
         others.push({
-          tag: def.name + " 강화", cls: "ally",
+          tag: `${def.name} 강화 (${owned.upLv[i]}/${up.maxLv})`, cls: "ally",
           name: up.name, desc: up.desc,
-          apply: () => { up.apply(owned); owned.level++; },
+          apply: () => { up.apply(owned); owned.upLv[i]++; owned.level++; },
         });
-      }
+      });
     }
   }
   for (const sk of HERO_SKILLS) {
+    if (sk.available && !sk.available(stats)) continue;
     others.push({
       tag: "주인공", cls: "hero",
       name: sk.name, desc: sk.desc,
@@ -627,11 +807,13 @@ function buildCardPool() {
 }
 
 function recruitCompanion(def) {
-  game.companions.push({
-    def,
-    x: CONFIG.logicalWidth * def.xRatio,   // 방어선 아래 가로 배치
-    ...def.initState(),
-  });
+  const comp = { def, level: 1, upLv: def.upgrades.map(() => 0), x: W / 2, ...def.initState() };
+  if (game.companions.length < CONFIG.maxDeployed) {
+    game.companions.push(comp);
+    assignSlots();
+  } else {
+    game.reserve.push(comp);   // 자리가 없으면 숙소 대기 (캠프에서 교체)
+  }
 }
 
 const skillOverlay = document.getElementById("skill-overlay");
@@ -667,72 +849,259 @@ function showCardChoices() {
 }
 
 /* ================================================================
-   [9.5] 캠프 시스템 ★ 10웨이브마다의 쉬는 타임 ★
+   [10] 캠프 — 캔버스로 그리는 장면 + 시설 터치
    ----------------------------------------------------------------
-   - 화폐: 킬 (HUD의 KILL 수치가 그대로 지갑입니다. 쓰면 줄어요)
-   - 마을 회관: 3킬당 공격력 +20% (한 판 내내 유지)
-   - 출정 시: 주인공의 카드 강화는 초기화, 동료는 레벨째 유지,
-     바리케이드는 완전 수리 (날이 밝았으니까!)
+   위: 바리케이드 / 중앙: 마을 회관 / 좌하: 임시 의무대 / 우하: 숙소
+   시설을 탭하면 패널이 열립니다. 하단의 [출정] 탭으로 재출발.
    ================================================================ */
-const campOverlay = document.getElementById("camp-overlay");
-const campKillsEl = document.getElementById("camp-kills");
-const campAtkEl = document.getElementById("camp-atk");
-const campUpgradeBtn = document.getElementById("camp-upgrade-btn");
-const campDepartBtn = document.getElementById("camp-depart-btn");
-const CAMP_UPGRADE_COST = 3;
-
-function refreshCampUI() {
-  campKillsEl.textContent = game.killCount;
-  campAtkEl.textContent = "+" + (game.campAtk * 20) + "%";
-  campUpgradeBtn.disabled = game.killCount < CAMP_UPGRADE_COST;
-}
-
-function showCamp() {
-  game.barricadeHp = CONFIG.barricadeMaxHp;   // 수리
-  resetHeroStats();                            // 주인공 강화 초기화 (동료는 그대로)
-  refreshCampUI();
-  campOverlay.style.display = "flex";
-}
-
-campUpgradeBtn.onclick = () => {
-  if (game.killCount < CAMP_UPGRADE_COST) return;
-  game.killCount -= CAMP_UPGRADE_COST;
-  game.campAtk++;
-  refreshCampUI();
+const CAMP_ZONES = {
+  hall:   { x: W / 2 - 70, y: 250, w: 140, h: 130 },
+  medic:  { x: 30,         y: 470, w: 120, h: 110 },
+  lodge:  { x: W - 150,    y: 470, w: 120, h: 110 },
+  depart: { x: W / 2 - 80, y: 660, w: 160, h: 52 },
 };
 
-campDepartBtn.onclick = () => {
-  campOverlay.style.display = "none";
+function enterCamp() {
+  game.state = "camp";
+  game.barricadeHp = CONFIG.barricadeMaxHp;   // 도착하며 기본 정비
+  resetHeroStats();                            // 주인공 전투 강화 초기화
+  // 전장 오브젝트 정리
+  game.bullets = []; game.cars = []; game.particles = []; game.effects = [];
+}
+
+function campTap(x, y) {
+  const hit = (z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+  if (hit(CAMP_ZONES.hall))   { openFacility("hall"); return; }
+  if (hit(CAMP_ZONES.medic))  { openFacility("medic"); return; }
+  if (hit(CAMP_ZONES.lodge))  { openLodge(); return; }
+  if (hit(CAMP_ZONES.depart)) { departCamp(); return; }
+}
+
+function departCamp() {
+  game.state = "battle";
   startWave(game.wave + 1);
   game.running = true;
-};
+}
+
+/* ---- 마을회관 / 의무대 패널 ---- */
+const facPanel = document.getElementById("facility-panel");
+const facTitle = document.getElementById("fac-title");
+const facDesc = document.getElementById("fac-desc");
+const facAction = document.getElementById("fac-action");
+document.getElementById("fac-close").onclick = () => { facPanel.style.display = "none"; };
+
+let currentFacility = null;
+function openFacility(kind) {
+  currentFacility = kind;
+  refreshFacility();
+  facPanel.style.display = "flex";
+}
+function refreshFacility() {
+  if (currentFacility === "hall") {
+    facTitle.textContent = "🏛 마을 회관";
+    facDesc.innerHTML = `부대의 공격력을 훈련합니다. 강화는 한 판 내내 유지됩니다.<br>
+      보유 킬: <span class="kills">${game.killCount}</span> · 현재 공격력: <span class="kills">+${game.campAtk * 20}%</span>`;
+    facAction.textContent = "공격력 +20% — 3킬";
+    facAction.disabled = game.killCount < 3;
+    facAction.onclick = () => {
+      if (game.killCount < 3) return;
+      game.killCount -= 3;
+      game.campAtk++;
+      refreshFacility();
+    };
+  } else {
+    facTitle.textContent = "⛑ 임시 의무대";
+    facDesc.innerHTML = `바리케이드를 완전 수리합니다.<br>
+      보유 킬: <span class="kills">${game.killCount}</span> · 바리케이드: <span class="kills">${Math.ceil(game.barricadeHp)} / ${CONFIG.barricadeMaxHp}</span>`;
+    facAction.textContent = "완전 수리 — 2킬";
+    facAction.disabled = game.killCount < 2 || game.barricadeHp >= CONFIG.barricadeMaxHp;
+    facAction.onclick = () => {
+      if (game.killCount < 2) return;
+      game.killCount -= 2;
+      game.barricadeHp = CONFIG.barricadeMaxHp;
+      refreshFacility();
+    };
+  }
+}
+
+/* ---- 숙소: 동료 교체 ---- */
+const lodgePanel = document.getElementById("lodge-panel");
+const deployedList = document.getElementById("deployed-list");
+const reserveList = document.getElementById("reserve-list");
+const deployCount = document.getElementById("deploy-count");
+document.getElementById("lodge-close").onclick = () => { lodgePanel.style.display = "none"; };
+
+function openLodge() {
+  refreshLodge();
+  lodgePanel.style.display = "flex";
+}
+function rosterRow(comp, action) {
+  const el = document.createElement("div");
+  el.className = "roster-row";
+  el.innerHTML = `<span class="rname" style="color:${comp.def.color}">${comp.def.name}</span>
+    <span class="rlv">Lv ${comp.level}</span>
+    <span class="rmove">${action === "bench" ? "대기로 ▼" : "출전 ▲"}</span>`;
+  el.onclick = () => {
+    if (action === "bench") {
+      game.companions.splice(game.companions.indexOf(comp), 1);
+      game.reserve.push(comp);
+    } else {
+      if (game.companions.length >= CONFIG.maxDeployed) return;
+      game.reserve.splice(game.reserve.indexOf(comp), 1);
+      game.companions.push(comp);
+    }
+    assignSlots();
+    refreshLodge();
+  };
+  return el;
+}
+function refreshLodge() {
+  deployCount.textContent = game.companions.length;
+  deployedList.innerHTML = "";
+  reserveList.innerHTML = "";
+  if (game.companions.length === 0) deployedList.innerHTML = `<div class="roster-empty">출전 중인 동료가 없습니다</div>`;
+  if (game.reserve.length === 0) reserveList.innerHTML = `<div class="roster-empty">대기 중인 동료가 없습니다</div>`;
+  game.companions.forEach(c => deployedList.appendChild(rosterRow(c, "bench")));
+  game.reserve.forEach(c => reserveList.appendChild(rosterRow(c, "deploy")));
+}
+
+/* ---- 캠프 장면 그리기 ---- */
+function drawCamp() {
+  // 새벽 하늘
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#e8975a");
+  g.addColorStop(0.25, "#8a5a48");
+  g.addColorStop(0.55, "#3a2f2a");
+  g.addColorStop(1, "#211a14");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  // 해
+  ctx.fillStyle = "rgba(255,220,150,0.9)";
+  ctx.beginPath(); ctx.arc(W * 0.75, 70, 26, 0, Math.PI * 2); ctx.fill();
+
+  // 위쪽 바리케이드 (전장의 그 방어선)
+  ctx.fillStyle = "#6b5a3e";
+  ctx.fillRect(10, 130, W - 20, 14);
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  for (let x = 20; x < W - 20; x += 26) ctx.fillRect(x, 130, 5, 14);
+  ctx.fillStyle = "#c9b896";
+  ctx.font = "11px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("바리케이드 — 이 너머는 놈들의 땅", W / 2, 122);
+
+  // ---- 마을 회관 (중앙) ----
+  const hz = CAMP_ZONES.hall;
+  ctx.fillStyle = "#8a7550";                              // 본관
+  ctx.fillRect(hz.x + 15, hz.y + 45, hz.w - 30, hz.h - 65);
+  ctx.fillStyle = "#5a4c34";                              // 지붕
+  ctx.beginPath();
+  ctx.moveTo(hz.x, hz.y + 50);
+  ctx.lineTo(hz.x + hz.w / 2, hz.y);
+  ctx.lineTo(hz.x + hz.w, hz.y + 50);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#3a2f22";                              // 문
+  ctx.fillRect(hz.x + hz.w / 2 - 13, hz.y + hz.h - 55, 26, 35);
+  ctx.fillStyle = "#d9c9a0";                              // 창문
+  ctx.fillRect(hz.x + 28, hz.y + 60, 18, 18);
+  ctx.fillRect(hz.x + hz.w - 46, hz.y + 60, 18, 18);
+  ctx.fillStyle = "#e8d9b8";
+  ctx.font = "bold 15px sans-serif";
+  ctx.fillText("마을 회관", W / 2, hz.y + hz.h + 20);
+  ctx.fillStyle = "#d9a441";
+  ctx.font = "11px sans-serif";
+  ctx.fillText(`공격력 +${game.campAtk * 20}%`, W / 2, hz.y + hz.h + 36);
+
+  // ---- 임시 의무대 (좌하) : 텐트 ----
+  const mz = CAMP_ZONES.medic;
+  ctx.fillStyle = "#7d8a72";
+  ctx.beginPath();
+  ctx.moveTo(mz.x, mz.y + mz.h - 20);
+  ctx.lineTo(mz.x + mz.w / 2, mz.y + 10);
+  ctx.lineTo(mz.x + mz.w, mz.y + mz.h - 20);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#4a5442";                              // 입구
+  ctx.beginPath();
+  ctx.moveTo(mz.x + mz.w / 2 - 16, mz.y + mz.h - 20);
+  ctx.lineTo(mz.x + mz.w / 2, mz.y + 44);
+  ctx.lineTo(mz.x + mz.w / 2 + 16, mz.y + mz.h - 20);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#c33b2e";                              // 적십자
+  ctx.fillRect(mz.x + mz.w / 2 - 4, mz.y + 22, 8, 22);
+  ctx.fillRect(mz.x + mz.w / 2 - 11, mz.y + 29, 22, 8);
+  ctx.fillStyle = "#e8d9b8";
+  ctx.font = "bold 14px sans-serif";
+  ctx.fillText("임시 의무대", mz.x + mz.w / 2, mz.y + mz.h + 8);
+
+  // ---- 숙소 (우하) : 오두막 ----
+  const lz = CAMP_ZONES.lodge;
+  ctx.fillStyle = "#6b5a48";
+  ctx.fillRect(lz.x + 10, lz.y + 35, lz.w - 20, lz.h - 55);
+  ctx.fillStyle = "#4a3c2c";
+  ctx.beginPath();
+  ctx.moveTo(lz.x, lz.y + 40);
+  ctx.lineTo(lz.x + lz.w / 2, lz.y);
+  ctx.lineTo(lz.x + lz.w, lz.y + 40);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#d9c9a0";
+  ctx.fillRect(lz.x + 24, lz.y + 48, 16, 16);
+  ctx.fillStyle = "#3a2f22";
+  ctx.fillRect(lz.x + lz.w - 44, lz.y + lz.h - 50, 22, 30);
+  ctx.fillStyle = "#e8d9b8";
+  ctx.font = "bold 14px sans-serif";
+  ctx.fillText("숙소", lz.x + lz.w / 2, lz.y + lz.h + 8);
+  ctx.fillStyle = "#6fa3d4";
+  ctx.font = "11px sans-serif";
+  ctx.fillText(`출전 ${game.companions.length}/4 · 대기 ${game.reserve.length}`, lz.x + lz.w / 2, lz.y + lz.h + 24);
+
+  // ---- 상단 안내 + 보유 킬 ----
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillRect(0, 0, W, 34);
+  ctx.fillStyle = "#d9a441";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("☀ 날이 밝았다 — 캠프", 12, 22);
+  ctx.textAlign = "right";
+  ctx.fillText(`보유 킬 ${game.killCount}`, W - 12, 22);
+
+  // ---- 출정 버튼 ----
+  const dz = CAMP_ZONES.depart;
+  ctx.fillStyle = "#c33b2e";
+  ctx.beginPath();
+  ctx.roundRect(dz.x, dz.y, dz.w, dz.h, 10);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 18px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("출 정", dz.x + dz.w / 2, dz.y + 33);
+  ctx.fillStyle = "#8a8577";
+  ctx.font = "11px sans-serif";
+  ctx.fillText("건물을 탭해서 시설 이용 · 전투 강화는 출정 시 초기화", W / 2, dz.y - 10);
+}
 
 /* ================================================================
-   [10] 그리기 — 세로 방향
+   [11] 그리기 (전투)
    ================================================================ */
 function draw() {
-  const W = CONFIG.logicalWidth, H = CONFIG.logicalHeight;
+  if (game.state === "camp") { drawCamp(); return; }
 
   if (IMAGES.background) {
     ctx.drawImage(IMAGES.background, 0, 0, W, H);
   } else {
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#11151a");          // 위쪽(적 진영)은 어둡게
+    g.addColorStop(0, "#11151a");
     g.addColorStop(0.78, "#171c22");
-    g.addColorStop(1, "#1a2027");          // 아래(아군)는 살짝 밝게
+    g.addColorStop(1, "#1a2027");
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
-    for (let x = 60; x < W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   }
 
-  // 바리케이드: 가로선
+  // 바리케이드
   const hpRatio = Math.max(0, game.barricadeHp / CONFIG.barricadeMaxHp);
   ctx.fillStyle = hpRatio > 0.4 ? "#6b5a3e" : "#7a3b2e";
   ctx.fillRect(10, CONFIG.barricadeY - 7, W - 20, 14);
   ctx.fillStyle = "rgba(0,0,0,0.25)";
   for (let x = 20; x < W - 20; x += 26) ctx.fillRect(x, CONFIG.barricadeY - 7, 5, 14);
 
-  // 동료들 (방어선 아래에 늘어섬)
+  // 동료
   for (const comp of game.companions) drawCompanion(comp);
 
   // 주인공
@@ -741,31 +1110,52 @@ function draw() {
   // 좀비
   for (const z of game.zombies) drawZombie(z);
 
-  // 차량 (세로 방향으로 돌진)
+  // 차량
   for (const car of game.cars) {
     if (IMAGES.car) {
       ctx.drawImage(IMAGES.car, car.x - 18, car.y - 30, 36, 60);
     } else {
       ctx.fillStyle = "#c9884a";
-      ctx.fillRect(car.x - 13, car.y - 26, 26, 52);   // 차체 (세로)
+      ctx.fillRect(car.x - 13, car.y - 26, 26, 52);
       ctx.fillStyle = "#2b2b2b";
-      ctx.fillRect(car.x - 9, car.y - 12, 18, 22);    // 지붕
-      ctx.beginPath(); ctx.arc(car.x - 14, car.y - 15, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(car.x + 14, car.y - 15, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(car.x - 14, car.y + 15, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(car.x + 14, car.y + 15, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(car.x - 9, car.y - 12, 18, 22);
     }
   }
 
   // 탄환
   for (const b of game.bullets) {
-    if (IMAGES.bullet && !b.sniper) {
+    if (b.bomb) {
+      ctx.fillStyle = "#b5533c";
+      ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#e8975a";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(b.x, b.y, 7, 0, Math.PI * 2); ctx.stroke();
+    } else if (IMAGES.bullet && !b.sniper) {
       ctx.drawImage(IMAGES.bullet, b.x - 6, b.y - 6, 12, 12);
     } else {
       ctx.fillStyle = b.sniper ? "#c9a0ff" : "#ffd47a";
       ctx.beginPath(); ctx.arc(b.x, b.y, b.sniper ? 5 : 4, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = b.sniper ? "rgba(201,160,255,0.3)" : "rgba(255,212,122,0.3)";
-      ctx.fillRect(b.x - 1.5, b.y + 4, 3, 14);       // 궤적을 아래로
+    }
+  }
+
+  // 이펙트 (체인 번개 / 폭발 / 스윙)
+  for (const e of game.effects) {
+    if (e.type === "chain") {
+      ctx.strokeStyle = `rgba(120,200,255,${e.life * 7})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(e.pts[0].x, e.pts[0].y);
+      for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i].x, e.pts[i].y);
+      ctx.stroke();
+    } else if (e.type === "boom") {
+      const t = 1 - e.life / 0.25;
+      ctx.strokeStyle = `rgba(232,151,90,${1 - t})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r * t, 0, Math.PI * 2); ctx.stroke();
+    } else if (e.type === "swing") {
+      ctx.strokeStyle = `rgba(212,192,90,${e.life * 4})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
     }
   }
 
@@ -792,7 +1182,7 @@ function draw() {
   if (game.campAtk > 0) {
     ctx.fillStyle = "#d9a441";
     ctx.font = "bold 11px sans-serif";
-    ctx.fillText(`⚔ +${game.campAtk * 20}%`, 100, 22);
+    ctx.fillText(`⚔ +${game.campAtk * 20}%`, 105, 22);
     ctx.fillStyle = "#e8e3d8";
     ctx.font = "bold 14px sans-serif";
   }
@@ -815,7 +1205,7 @@ function drawPlayer(x, y) {
   ctx.fillStyle = "#e0b48c";
   ctx.beginPath(); ctx.arc(x, y - 14, 8, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#2b2b2b";
-  ctx.fillRect(x - 2.5, y - 32, 5, 18);   // 총구가 위를 향함
+  ctx.fillRect(x - 2.5, y - 32, 5, 18);
 }
 
 function drawCompanion(comp) {
@@ -841,32 +1231,25 @@ function drawZombie(z) {
     const s = z.size * 2.4;
     ctx.drawImage(img, z.x - s / 2, z.y - s / 2, s, s);
   } else {
-    const sway = Math.sin(z.wobble) * 2;   // 좌우로 기우뚱대며 내려옴
+    const sway = Math.sin(z.wobble) * 2;
     ctx.fillStyle = z.big ? "#4c6b33" : "#5b7d3c";
     ctx.beginPath(); ctx.arc(z.x + sway, z.y, z.size, 0, Math.PI * 2); ctx.fill();
-    // 팔: 아래(방어선 쪽)를 향해 뻗음
-    ctx.strokeStyle = z.big ? "#3c5527" : "#48632f";
-    ctx.lineWidth = z.big ? 7 : 4;
-    ctx.beginPath();
-    ctx.moveTo(z.x + sway - z.size * 0.3, z.y);
-    ctx.lineTo(z.x + sway - z.size * 0.3 + Math.sin(z.wobble * 2) * 4, z.y + z.size + 6);
-    ctx.stroke();
-    // 눈
     ctx.fillStyle = "#c33b2e";
     ctx.fillRect(z.x + sway - 5, z.y + z.size * 0.2, 4, 4);
     ctx.fillRect(z.x + sway + 2, z.y + z.size * 0.2, 4, 4);
   }
+  // 물량전에선 체력바를 대형 좀비/다친 적에게만, 얇게
   if (z.hp < z.maxHp) {
     const w = z.size * 2;
     ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillRect(z.x - w / 2, z.y - z.size - 12, w, 5);
+    ctx.fillRect(z.x - w / 2, z.y - z.size - 9, w, 4);
     ctx.fillStyle = "#c33b2e";
-    ctx.fillRect(z.x - w / 2, z.y - z.size - 12, w * (z.hp / z.maxHp), 5);
+    ctx.fillRect(z.x - w / 2, z.y - z.size - 9, w * (z.hp / z.maxHp), 4);
   }
 }
 
 /* ================================================================
-   [11] 시작/종료 + 게임 루프
+   [12] 시작/종료 + 게임 루프
    ================================================================ */
 const centerOverlay = document.getElementById("center-overlay");
 const centerText = document.getElementById("center-text");
@@ -881,7 +1264,7 @@ startBtn.onclick = () => {
 
 function endGame(win) {
   game.running = false;
-  const allies = game.companions.map(c => `${c.def.name} Lv${c.level}`).join(", ") || "없음";
+  const allies = allOwned().map(c => `${c.def.name} Lv${c.level}`).join(", ") || "없음";
   centerText.innerHTML = win
     ? `<b style="color:#5b9e4f">생존 성공!</b><br>${CONFIG.wavesPerRun}웨이브 클리어 · 처치 ${game.killCount}<br>동료: ${allies}`
     : `<b style="color:#c33b2e">바리케이드 붕괴...</b><br>WAVE ${game.wave} · 처치 ${game.killCount}<br>동료: ${allies}`;
@@ -893,7 +1276,7 @@ let lastTime = performance.now();
 function loop(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
-  if (game.running && !pausedByHide) update(dt * gameSpeed);
+  if (game.running && !pausedByHide && game.state === "battle") update(dt * gameSpeed);
   draw();
   requestAnimationFrame(loop);
 }
