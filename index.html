@@ -292,6 +292,8 @@ const COMPANION_DEFS = [
       { name: "저격수: 대물 저격총", desc: "저격 피해 +55%", maxLv: 5, apply: c => c.dmgMul *= 1.55 },
       { name: "저격수: 철갑탄",     desc: "관통 +1",        maxLv: 3, apply: c => c.pierce += 1 },
     ],
+    // 카드 우선순위: 관통(1번)을 1업 하기 전까진 관통 카드만 등장
+    cardFilter: c => c.upLv[1] < 1 ? [1] : [0, 1],
   },
   {
     id: "medic", name: "의무병", color: "#5b9e7d",
@@ -337,9 +339,12 @@ const COMPANION_DEFS = [
       }
     },
     upgrades: [
-      { name: "드라이버: 차량 증편", desc: "차량 +1대 (최대 5대)", maxLv: 4, apply: c => c.fleet += 1 },
-      { name: "드라이버: 강판 개조", desc: "차량 피해 +30",        maxLv: 5, apply: c => c.dmg += 30 },
+      { name: "드라이버: 차량 증편", desc: "차량 +1대 (최대 5대)",       maxLv: 4, apply: c => c.fleet += 1 },
+      { name: "드라이버: 강판 개조", desc: "차량 피해 +30",              maxLv: 5, apply: c => c.dmg += 30 },
+      { name: "드라이버: 예열 정비", desc: "출격 간격 -2초 (최소 4초)",   maxLv: 3, apply: c => c.interval = Math.max(4, c.interval - 2) },
     ],
+    // 카드 우선순위: 차량 3대가 될 때까진 증편만, 이후 셋 다 동일 확률
+    cardFilter: c => c.fleet < 3 ? [0] : [0, 1, 2],
   },
   {
     id: "bomber", name: "폭탄병", color: "#b5533c",
@@ -365,6 +370,8 @@ const COMPANION_DEFS = [
       { name: "폭탄병: 확장 폭약", desc: "폭발 범위 확대 (3렙 맥스)", maxLv: 3, apply: c => c.radiusLv += 1 },
       { name: "폭탄병: 고성능 화약", desc: "폭발 피해 +50%",          maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.5) },
     ],
+    // 카드 우선순위: 범위를 1업 하기 전까진 범위 카드만 등장
+    cardFilter: c => c.radiusLv < 1 ? [0] : [0, 1],
   },
   {
     id: "engineer", name: "기공사", color: "#5aa8c9",
@@ -794,6 +801,8 @@ function buildCardPool() {
     const owned = allOwned().find(c => c.def.id === def.id);
     if (!owned) {
       if (canRecruit) {
+        // 의무병은 1~10웨이브에서 영입 카드 금지 (강당 합류로만 얻음)
+        if (def.id === "medic" && game.wave <= 10) continue;
         recruits.push({
           tag: "동료 영입", cls: "recruit",
           name: def.name + " 영입",
@@ -802,7 +811,10 @@ function buildCardPool() {
         });
       }
     } else {
+      // 카드 우선순위 필터: 정의되어 있으면 허용된 강화만 노출
+      const allowed = def.cardFilter ? def.cardFilter(owned) : def.upgrades.map((_, i) => i);
       def.upgrades.forEach((up, i) => {
+        if (!allowed.includes(i)) return;
         if (owned.upLv[i] >= up.maxLv) return;   // 맥스 도달 카드는 제외
         others.push({
           tag: `${def.name} 강화 (${owned.upLv[i]}/${up.maxLv})`, cls: "ally",
@@ -926,11 +938,11 @@ function refreshFacility() {
     facTitle.textContent = "📢 강당 방송실";
     facDesc.innerHTML = `방송으로 작전을 지시해 부대의 공격력을 끌어올립니다. 강화는 한 판 내내 유지됩니다.<br>
       보유 킬: <span class="kills">${game.killCount}</span> · 현재 공격력: <span class="kills">+${game.campAtk * 20}%</span>`;
-    facAction.textContent = "공격력 +20% — 3킬";
-    facAction.disabled = game.killCount < 3;
+    facAction.textContent = "공격력 +20% — 100킬";
+    facAction.disabled = game.killCount < 100;
     facAction.onclick = () => {
-      if (game.killCount < 3) return;
-      game.killCount -= 3;
+      if (game.killCount < 100) return;
+      game.killCount -= 100;
       game.campAtk++;
       refreshFacility();
     };
