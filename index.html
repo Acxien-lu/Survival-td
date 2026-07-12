@@ -146,6 +146,33 @@
   .roster-row .rlv { color: #6fa3d4; font-size: 12px; }
   .roster-row .rmove { color: #8a8577; font-size: 11px; }
   .roster-empty { color: #5a5548; font-size: 12px; padding: 6px 2px; }
+
+  /* ---- 개인 훈련소 ---- */
+  #train-panel {
+    position: absolute; inset: 0;
+    background: rgba(5,6,8,0.85);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    gap: 10px; z-index: 25;
+  }
+  #train-panel h3 { color: #e8d9b8; font-size: 19px; }
+  #train-panel .hint { color: #8a8577; font-size: 12px; margin-bottom: 4px; }
+  .train-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+    background: #1d232b; border: 1px solid #3a4350; border-radius: 8px;
+    padding: 9px 12px; margin-bottom: 6px;
+  }
+  .train-row .tname { color: #f0ece1; font-size: 14px; font-weight: 700; }
+  .train-row .tdesc { color: #9aa3ad; font-size: 11px; }
+  .train-buy {
+    background: #6b5a3e; color: #f0ece1;
+    border: 1px solid #8a7550; border-radius: 6px;
+    font-size: 12px; font-weight: 700;
+    padding: 8px 10px; cursor: pointer; white-space: nowrap;
+  }
+  .train-buy:disabled { opacity: 0.35; }
+  .train-buy:active:not(:disabled) { transform: scale(0.95); }
 </style>
 </head>
 <body>
@@ -188,6 +215,14 @@
       <div id="reserve-list"></div>
     </div>
     <button class="fac-close" id="lodge-close">닫기</button>
+  </div>
+
+  <!-- 개인 훈련소 패널: 주인공 영구 강화 -->
+  <div id="train-panel">
+    <h3>🎯 개인 훈련소</h3>
+    <div class="hint">보유 킬: <span id="train-kills" style="color:#d9a441; font-weight:700">0</span> · 강화당 50킬 · <b style="color:#e06a5c">영구 유지</b> (캠프에서도 안 지워짐)</div>
+    <div class="lodge-section" id="train-list"></div>
+    <button class="fac-close" id="train-close">닫기</button>
   </div>
 
   <div id="center-overlay">
@@ -384,8 +419,8 @@ const COMPANION_DEFS = [
     mover: true,
     initState: () => ({ cooldown: 0, dmg: 8, chainLv: 0 }),
     update(comp, dt) {
-      // 이동: 방어선에 가장 가까운 적의 x 위치로 (기본 540의 -10% = 486)
-      moveToNearestX(comp, dt, 486);
+      // 이동: 방어선에 가장 가까운 적의 x 위치로 (486의 -10% = 437)
+      moveToNearestX(comp, dt, 437);
       // 공격: 전방(위) 직선상, 사거리 H/2 이내의 가장 가까운 적
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
@@ -473,7 +508,7 @@ const COMPANION_DEFS = [
 const HERO_SKILLS = [
   { name: "속사",       desc: "공격 속도 +35%",             apply: s => s.fireRateMul *= 1.35 },
   { name: "고화력 탄환", desc: "공격력 +45%",                apply: s => s.damageMul *= 1.45 },
-  { name: "더블 샷",     desc: "발사 탄환 +1 (최대 5발)",     apply: s => s.multishot += 1,
+  { name: "멀티 샷",     desc: "발사 탄환 +1 (최대 5발)",     apply: s => s.multishot += 1,
     available: s => s.multishot < CONFIG.maxMultishot },
   { name: "관통탄",      desc: "탄환이 적 1명을 추가 관통",    apply: s => s.pierce += 1 },
   { name: "넉백 강화",   desc: "명중 시 적을 밀어냄 +10",      apply: s => s.knockback += 10 },
@@ -487,17 +522,22 @@ let game, stats;
 let gameSpeed = 1;
 let pausedByHide = false;
 
+// 주인공 스탯 = 훈련소에서 산 영구 강화(permHero)의 복사본.
+// 웨이브 카드로 주인공을 키우는 시대는 끝났습니다 — 오직 훈련소!
+function baseHeroStats() {
+  return { fireRateMul: 1, damageMul: 1, multishot: 1, pierce: 0, knockback: 0, thorns: 0 };
+}
 function resetHeroStats() {
-  stats = { fireRateMul: 1, damageMul: 1, multishot: 1, pierce: 0, knockback: 0, thorns: 0 };
+  stats = { ...game.permHero };
 }
 
 function resetGame() {
-  resetHeroStats();
   game = {
     state: "battle",     // "battle" | "camp"
     running: false,
     wave: 0,
     campAtk: 0,
+    permHero: baseHeroStats(),   // 훈련소 영구 강화 (한 판 내내 유지, 캠프에도 안 지워짐)
     barricadeHp: CONFIG.barricadeMaxHp,
     playerX: W / 2,
     fireCooldown: 0,
@@ -514,6 +554,7 @@ function resetGame() {
     particles: [],
     effects: [],         // 체인/폭발/스윙 이펙트
   };
+  resetHeroStats();
 }
 
 // 출전 동료들의 자리(x)를 다시 배정 — 뛰어다니는 동료는 시작 위치만 받음
@@ -828,14 +869,7 @@ function buildCardPool() {
       });
     }
   }
-  for (const sk of HERO_SKILLS) {
-    if (sk.available && !sk.available(stats)) continue;
-    others.push({
-      tag: "주인공", cls: "hero",
-      name: sk.name, desc: sk.desc,
-      apply: () => sk.apply(stats, game),
-    });
-  }
+  // ★ 주인공 카드는 웨이브에서 등장 금지 — 강당의 개인 훈련소에서만 영구 강화
   return { recruits, others };
 }
 
@@ -861,6 +895,12 @@ function showCardChoices() {
   const pool = [...recruits, ...others];
   while (picks.length < 3 && pool.length > 0) {
     picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  // 모든 강화가 맥스라 보여줄 카드가 없으면 바로 다음 웨이브로
+  if (picks.length === 0) {
+    startWave(game.wave + 1);
+    game.running = true;
+    return;
   }
   skillCards.innerHTML = "";
   skillCards.style.display = "flex";
@@ -891,13 +931,20 @@ const CAMP_ZONES = {
   hall:   { x: W / 2 - 70, y: 250, w: 140, h: 130 },
   medic:  { x: 30,         y: 470, w: 120, h: 110 },
   lodge:  { x: W - 150,    y: 470, w: 120, h: 110 },
+  train:  { x: W / 2 - 60, y: 462, w: 120, h: 118 },   // 하단 중앙: 개인 훈련소
   depart: { x: W / 2 - 80, y: 660, w: 160, h: 52 },
 };
 
 function enterCamp() {
   game.state = "camp";
   game.barricadeHp = CONFIG.barricadeMaxHp;   // 도착하며 기본 정비
-  resetHeroStats();                            // 주인공 전투 강화 초기화
+  resetHeroStats();                            // 주인공은 훈련소 영구 강화만 유지
+  // ★ 동료들도 전투 강화 전부 초기화 (영입/출전 상태는 유지)
+  for (const comp of allOwned()) {
+    Object.assign(comp, comp.def.initState());
+    comp.upLv = comp.def.upgrades.map(() => 0);
+    comp.level = 1;
+  }
   game.bullets = []; game.cars = []; game.particles = []; game.effects = [];
   // 날이 밝자, 안전한 캠프가 있다는 소문을 듣고 남은 동료들이 전부 합류
   const joined = [];
@@ -914,6 +961,7 @@ function campTap(x, y) {
   const hit = (z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
   if (hit(CAMP_ZONES.hall))   { openFacility("hall"); return; }
   if (hit(CAMP_ZONES.medic))  { openFacility("medic"); return; }
+  if (hit(CAMP_ZONES.train))  { openTrain(); return; }
   if (hit(CAMP_ZONES.lodge))  { openLodge(); return; }
   if (hit(CAMP_ZONES.depart)) { departCamp(); return; }
 }
@@ -962,6 +1010,41 @@ function refreshFacility() {
       game.barricadeHp = CONFIG.barricadeMaxHp;
       refreshFacility();
     };
+  }
+}
+
+/* ---- 개인 훈련소: 주인공 영구 강화 (50킬, permHero에 적용) ---- */
+const trainPanel = document.getElementById("train-panel");
+const trainList = document.getElementById("train-list");
+const trainKills = document.getElementById("train-kills");
+document.getElementById("train-close").onclick = () => { trainPanel.style.display = "none"; };
+const TRAIN_COST = 50;
+
+function openTrain() {
+  refreshTrain();
+  trainPanel.style.display = "flex";
+}
+function refreshTrain() {
+  trainKills.textContent = game.killCount;
+  trainList.innerHTML = "";
+  for (const sk of HERO_SKILLS) {
+    const maxed = sk.available && !sk.available(game.permHero);
+    const row = document.createElement("div");
+    row.className = "train-row";
+    row.innerHTML = `<div><div class="tname">${sk.name}</div><div class="tdesc">${sk.desc}</div></div>`;
+    const btn = document.createElement("button");
+    btn.className = "train-buy";
+    btn.textContent = maxed ? "맥스" : "50킬";
+    btn.disabled = maxed || game.killCount < TRAIN_COST;
+    btn.onclick = () => {
+      if (game.killCount < TRAIN_COST) return;
+      game.killCount -= TRAIN_COST;
+      sk.apply(game.permHero, game);   // 영구 스탯에 적용
+      resetHeroStats();                 // 현재 스탯에 즉시 반영
+      refreshTrain();
+    };
+    row.appendChild(btn);
+    trainList.appendChild(row);
   }
 }
 
@@ -1100,6 +1183,29 @@ function drawCamp() {
   ctx.font = "11px sans-serif";
   ctx.fillText(`출전 ${game.companions.length}/4 · 대기 ${game.reserve.length}`, lz.x + lz.w / 2, lz.y + lz.h + 24);
 
+  // ---- 개인 훈련소 (하단 중앙) : 훈련 더미 + 과녁 ----
+  const tz = CAMP_ZONES.train;
+  ctx.fillStyle = "#4a4438";                              // 훈련 매트
+  ctx.fillRect(tz.x + 8, tz.y + tz.h - 34, tz.w - 16, 18);
+  ctx.fillStyle = "#8a7550";                              // 더미 기둥
+  ctx.fillRect(tz.x + tz.w / 2 - 4, tz.y + 34, 8, 48);
+  ctx.fillStyle = "#c9b896";                              // 더미 몸통
+  ctx.fillRect(tz.x + tz.w / 2 - 12, tz.y + 30, 24, 30);
+  // 과녁
+  ctx.fillStyle = "#e8e0c0";
+  ctx.beginPath(); ctx.arc(tz.x + tz.w / 2, tz.y + 18, 13, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#c33b2e"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(tz.x + tz.w / 2, tz.y + 18, 8, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = "#c33b2e";
+  ctx.beginPath(); ctx.arc(tz.x + tz.w / 2, tz.y + 18, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#e8d9b8";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("개인 훈련소", tz.x + tz.w / 2, tz.y + tz.h + 8);
+  ctx.fillStyle = "#e06a5c";
+  ctx.font = "11px sans-serif";
+  ctx.fillText("주인공 영구 강화", tz.x + tz.w / 2, tz.y + tz.h + 24);
+
   // ---- 상단 안내 + 보유 킬 ----
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.fillRect(0, 0, W, 34);
@@ -1122,7 +1228,7 @@ function drawCamp() {
   ctx.fillText("출 정", dz.x + dz.w / 2, dz.y + 33);
   ctx.fillStyle = "#8a8577";
   ctx.font = "11px sans-serif";
-  ctx.fillText("건물을 탭해서 시설 이용 · 전투 강화는 출정 시 초기화", W / 2, dz.y - 10);
+  ctx.fillText("건물 탭 = 시설 이용 · 출정 시 전투 강화(카드) 전부 초기화 · 훈련소는 영구", W / 2, dz.y - 10);
 }
 
 /* ================================================================
