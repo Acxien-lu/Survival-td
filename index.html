@@ -432,8 +432,8 @@ const COMPANION_DEFS = [
     mover: true,
     initState: () => ({ cooldown: 0, dmg: 8, chainLv: 0 }),
     update(comp, dt) {
-      // 이동: 방어선에 가장 가까운 적의 x 위치로 (486의 -10% = 437)
-      moveToNearestX(comp, dt, 437);
+      // 이동: 방어선에 가장 가까운 적의 x 위치로 (437의 -20% = 350)
+      moveToNearestX(comp, dt, 350);
       // 공격: 전방(위) 직선상, 사거리 H/2 이내의 가장 가까운 적
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
@@ -1296,12 +1296,27 @@ function draw() {
   // 이펙트 (체인 번개 / 폭발 / 스윙)
   for (const e of game.effects) {
     if (e.type === "chain") {
-      ctx.strokeStyle = `rgba(120,200,255,${e.life * 7})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(e.pts[0].x, e.pts[0].y);
-      for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i].x, e.pts[i].y);
-      ctx.stroke();
+      // 전기(번개) 이펙트: 굵기 7(폭탄병 투사체 반지름) 글로우 + 흰 심지,
+      // 구간마다 지그재그 중간점을 넣어 매 프레임 파르르 떨리게
+      const a = Math.max(0, e.life * 7);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      for (const [lw, color] of [[7, `rgba(110,185,255,${a * 0.45})`], [2.5, `rgba(235,246,255,${a})`]]) {
+        ctx.lineWidth = lw;
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(e.pts[0].x, e.pts[0].y);
+        for (let i = 1; i < e.pts.length; i++) {
+          const p0 = e.pts[i - 1], p1 = e.pts[i];
+          // 1/3, 2/3 지점을 좌우로 흔들어 번개 꺾임 표현
+          ctx.lineTo(p0.x + (p1.x - p0.x) / 3 + (Math.random() - 0.5) * 16,
+                     p0.y + (p1.y - p0.y) / 3 + (Math.random() - 0.5) * 16);
+          ctx.lineTo(p0.x + (p1.x - p0.x) * 2 / 3 + (Math.random() - 0.5) * 16,
+                     p0.y + (p1.y - p0.y) * 2 / 3 + (Math.random() - 0.5) * 16);
+          ctx.lineTo(p1.x, p1.y);
+        }
+        ctx.stroke();
+      }
     } else if (e.type === "boom") {
       const t = 1 - e.life / 0.25;
       ctx.strokeStyle = `rgba(232,151,90,${1 - t})`;
