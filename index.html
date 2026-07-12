@@ -1297,14 +1297,20 @@ function draw() {
     if (IMAGES.car) {
       ctx.drawImage(IMAGES.car, car.x - 18, car.y - 30, 36, 60);
     } else if (car.kind === "bike") {
-      // 오토바이: 좁은 차체 + 라이더
-      ctx.fillStyle = "#8a8a92";
-      ctx.fillRect(car.x - 5, car.y - 18, 10, 36);
-      ctx.fillStyle = "#2b2b2b";
-      ctx.beginPath(); ctx.arc(car.x, car.y - 20, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(car.x, car.y + 20, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#3d5a80";
-      ctx.beginPath(); ctx.arc(car.x, car.y - 4, 6, 0, Math.PI * 2); ctx.fill();
+      // 오토바이 (위에서 본 모습): 앞뒤 바퀴 + 차체 + 핸들바 + 라이더
+      ctx.fillStyle = "#1f1f24";                                   // 앞바퀴
+      ctx.fillRect(car.x - 4, car.y - 26, 8, 13);
+      ctx.fillRect(car.x - 4, car.y + 13, 8, 13);                  // 뒷바퀴
+      ctx.fillStyle = "#c33b2e";                                   // 차체 (밝은 빨강)
+      ctx.fillRect(car.x - 6, car.y - 15, 12, 30);
+      ctx.fillStyle = "#2b2b2b";                                   // 핸들바 (가로로 넓게)
+      ctx.fillRect(car.x - 15, car.y - 13, 30, 4);
+      ctx.fillStyle = "#ffd47a";                                   // 전조등
+      ctx.beginPath(); ctx.arc(car.x, car.y - 22, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#3d5a80";                                   // 라이더 헬멧
+      ctx.beginPath(); ctx.arc(car.x, car.y + 3, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#e8e8f0";                                   // 헬멧 하이라이트
+      ctx.beginPath(); ctx.arc(car.x - 2, car.y + 1, 2.5, 0, Math.PI * 2); ctx.fill();
     } else if (car.kind === "truck") {
       // 트럭: 캡 + 짐칸
       ctx.fillStyle = "#7a8a5a";
