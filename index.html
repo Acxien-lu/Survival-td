@@ -414,7 +414,7 @@ const COMPANION_DEFS = [
       const radius = W / 6 + (W / 4 - W / 6) * (comp.radiusLv / 3);
       game.bullets.push({
         x: comp.x, y: CONFIG.playerY - 14,
-        vx: Math.cos(a) * 430, vy: Math.sin(a) * 430,
+        vx: Math.cos(a) * 516, vy: Math.sin(a) * 516,   // 430의 +20%
         hitsLeft: 1, damage: comp.dmg,
         bomb: true, radius,
       });
@@ -861,7 +861,7 @@ function update(dt) {
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx * dx + dy * dy < (z.size + 5) * (z.size + 5)) {
         if (b.bomb) {
-          explode(b.x, b.y, b.radius, b.damage);
+          explode(b.x, b.y, b.radius, b.damage, true);   // 폭탄 폭발 → 범위 내 차량 유폭 가능
           game.bullets.splice(i, 1);
           break;
         } else if (b.baseball) {
@@ -946,8 +946,9 @@ function update(dt) {
   }
 }
 
-// 폭탄병의 폭발: 반경 내 모든 적에게 피해
-function explode(x, y, radius, dmg) {
+// 폭발: 반경 내 모든 적에게 피해.
+// fromBomb=true(폭탄병의 폭탄)일 때는 폭발 범위에 닿은 차량도 유폭시킴 (시너지)
+function explode(x, y, radius, dmg, fromBomb) {
   game.effects.push({ type: "boom", x, y, r: radius, life: 0.25 });
   const r2 = radius * radius;
   for (let j = game.zombies.length - 1; j >= 0; j--) {
@@ -957,6 +958,19 @@ function explode(x, y, radius, dmg) {
       z.hp -= dmg;
       spawnParticles(z.x, z.y, "#b5533c", 3);
       if (z.hp <= 0) killZombie(j);
+    }
+  }
+  // ★ 유폭: 폭탄의 폭발 범위에 차량이 닿으면 그 차량도 폭발
+  //   (차량 폭발끼리는 연쇄되지 않음 — 폭탄이 기폭제일 때만)
+  if (fromBomb) {
+    for (let k = game.cars.length - 1; k >= 0; k--) {
+      const car = game.cars[k];
+      const dx = car.x - x, dy = car.y - y;
+      if (dx * dx + dy * dy < (radius + 26) * (radius + 26)) {
+        const carDmg = car.dmg;
+        game.cars.splice(k, 1);
+        explode(car.x, car.y, W / 4, dmg + carDmg, false);
+      }
     }
   }
 }
