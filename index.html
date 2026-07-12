@@ -161,7 +161,7 @@ const CONFIG = {
   baseFireInterval: 0.45,
   baseDamage: 12,
   baseBulletSpeed: 540,
-  wavesPerRun: 10,
+  wavesPerRun: 30,
 };
 
 /* ================================================================
@@ -289,19 +289,20 @@ function resetGame() {
    ================================================================ */
 function startWave(n) {
   game.wave = n;
-  game.spawnQueue = 3 + n * 2;
+  game.spawnQueue = Math.floor(3 + n * 1.3);   // 30웨이브 기준 완만한 증가 (w10=16, w30=42)
   game.spawnTimer = 0.5;
 }
 
 function spawnZombie() {
-  const big = game.wave >= 4 && Math.random() < 0.12;
-  const hpBase = 14 + game.wave * 5;
+  // 대형 좀비: 4웨이브부터, 확률이 서서히 증가 (최대 22%)
+  const big = game.wave >= 4 && Math.random() < Math.min(0.22, 0.05 + game.wave * 0.005);
+  const hpBase = Math.round(14 + game.wave * 3 + game.wave * game.wave * 0.15);
   game.zombies.push({
     x: 45 + Math.random() * (CONFIG.logicalWidth - 90),  // 가로 위치는 무작위
     y: -30,                                              // 화면 위에서 등장
     hp:    big ? hpBase * 3 : hpBase,
     maxHp: big ? hpBase * 3 : hpBase,
-    speed: (big ? 24 : 38) + game.wave * 1.2 + Math.random() * 10,
+    speed: Math.min(90, (big ? 24 : 38) + game.wave * 0.5 + Math.random() * 10),
     size:  big ? 30 : 17,
     big,
     attackTimer: 0,
@@ -379,7 +380,7 @@ function update(dt) {
     if (game.spawnTimer <= 0) {
       spawnZombie();
       game.spawnQueue--;
-      game.spawnTimer = Math.max(0.35, 1.3 - game.wave * 0.05);
+      game.spawnTimer = Math.max(0.3, 1.3 - game.wave * 0.03);   // 30웨이브에 걸쳐 서서히 촘촘해짐
     }
   }
 
@@ -751,7 +752,7 @@ function endGame(win) {
   game.running = false;
   const allies = game.companions.map(c => `${c.def.name} Lv${c.level}`).join(", ") || "없음";
   centerText.innerHTML = win
-    ? `<b style="color:#5b9e4f">생존 성공!</b><br>10웨이브 클리어 · 처치 ${game.killCount}<br>동료: ${allies}`
+    ? `<b style="color:#5b9e4f">생존 성공!</b><br>${CONFIG.wavesPerRun}웨이브 클리어 · 처치 ${game.killCount}<br>동료: ${allies}`
     : `<b style="color:#c33b2e">바리케이드 붕괴...</b><br>WAVE ${game.wave} · 처치 ${game.killCount}<br>동료: ${allies}`;
   startBtn.textContent = "다시 도전";
   centerOverlay.style.display = "flex";
