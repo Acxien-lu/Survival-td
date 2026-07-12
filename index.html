@@ -519,6 +519,7 @@ const COMPANION_DEFS = [
         if (sc && sc.balls && sc.balls.length > 0) {
           let nearBall = null, nearD = r2;
           for (const b of sc.balls) {
+            if (b.rest) continue;   // ★ 바리케이드에 멈춰 있는 공은 제외 — 움직이는 공만!
             const bx = b.x - cx0, by = b.y - cy0, bd = bx * bx + by * by;
             if (bd < nearD) { nearD = bd; nearBall = b; }
           }
