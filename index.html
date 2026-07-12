@@ -256,13 +256,12 @@ const W = CONFIG.logicalWidth, H = CONFIG.logicalHeight;
    mover: true 인 동료는 가로로 뛰어다닙니다.
    ================================================================ */
 // 이동형 동료(기공사·야구부) 공용: 방어선에 가장 가까운 적의 x로 이동
-// 속도는 주인공 초기 탄속(540)과 동일. 적이 없으면 제자리.
-function moveToNearestX(comp, dt) {
+function moveToNearestX(comp, dt, speed) {
   let near = null;
   for (const z of game.zombies) if (!near || z.y > near.y) near = z;
   if (!near) return;
   const dx = near.x - comp.x;
-  const step = 540 * dt;
+  const step = speed * dt;
   if (Math.abs(dx) > step) comp.x += Math.sign(dx) * step;
   else comp.x = near.x;
   comp.x = Math.max(40, Math.min(W - 40, comp.x));
@@ -316,7 +315,7 @@ const COMPANION_DEFS = [
   {
     id: "driver", name: "드라이버", color: "#c9884a",
     recruitDesc: "10초마다 차량 출격, 경로의 적 격파 (증편 가능)",
-    initState: () => ({ cooldown: 4, dmg: 35, interval: 10, fleet: 1, launchQueue: 0, launchTimer: 0 }),
+    initState: () => ({ cooldown: 4, dmg: 32, interval: 10, fleet: 1, launchQueue: 0, launchTimer: 0 }),
     update(comp, dt) {
       comp.cooldown -= dt;
       // 쿨이 돌면 보유 차량 수만큼 출격 대기열에 올림
@@ -332,7 +331,13 @@ const COMPANION_DEFS = [
           // (보유차량-대기열)번째로 방어선에 가까운 적을 타겟으로 → 차마다 다른 적
           const sorted = [...game.zombies].sort((a, b) => b.y - a.y);
           const idx = Math.min(comp.fleet - comp.launchQueue, sorted.length - 1);
-          game.cars.push({ x: sorted[idx].x, y: CONFIG.barricadeY - 20, speed: 420, dmg: comp.dmg, id: ++game.carSeq });
+          // 형태는 랜덤 (승용차/오토바이/트럭/버스), 충돌 판정은 모두 동일
+          const kinds = ["sedan", "bike", "truck", "bus"];
+          game.cars.push({
+            x: sorted[idx].x, y: CONFIG.barricadeY - 20, speed: 420, dmg: comp.dmg,
+            id: ++game.carSeq,
+            kind: kinds[Math.floor(Math.random() * kinds.length)],
+          });
           comp.launchQueue--;
           comp.launchTimer = 0.35;
         }
@@ -379,8 +384,8 @@ const COMPANION_DEFS = [
     mover: true,
     initState: () => ({ cooldown: 0, dmg: 8, chainLv: 0 }),
     update(comp, dt) {
-      // 이동: 방어선에 가장 가까운 적의 x 위치로 이동 (패트롤 아님)
-      moveToNearestX(comp, dt);
+      // 이동: 방어선에 가장 가까운 적의 x 위치로 (기본 540의 -10% = 486)
+      moveToNearestX(comp, dt, 486);
       // 공격: 전방(위) 직선상, 사거리 H/2 이내의 가장 가까운 적
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
@@ -429,8 +434,8 @@ const COMPANION_DEFS = [
     mover: true,
     initState: () => ({ cooldown: 0, dmg: 22, rangeLv: 0 }),
     update(comp, dt) {
-      // 이동: 방어선에 가장 가까운 적의 x 위치로 이동 (패트롤 아님)
-      moveToNearestX(comp, dt);
+      // 이동: 방어선에 가장 가까운 적의 x 위치로 (기본 540의 +10% = 594)
+      moveToNearestX(comp, dt, 594);
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
       // 스윙 범위: 세로는 화면의 1/4 고정, 가로는 1/5 → 1/4 → 1/3 (2렙 맥스)
@@ -472,9 +477,7 @@ const HERO_SKILLS = [
     available: s => s.multishot < CONFIG.maxMultishot },
   { name: "관통탄",      desc: "탄환이 적 1명을 추가 관통",    apply: s => s.pierce += 1 },
   { name: "넉백 강화",   desc: "명중 시 적을 밀어냄 +10",      apply: s => s.knockback += 10 },
-  { name: "응급 수리",   desc: "바리케이드 HP 60 회복",       apply: (s, g) => g.barricadeHp = Math.min(CONFIG.barricadeMaxHp, g.barricadeHp + 60) },
   { name: "대구경 개조", desc: "공격력 +80%, 공격 속도 -15%", apply: s => { s.damageMul *= 1.80; s.fireRateMul *= 0.85; } },
-  { name: "철조망",      desc: "바리케이드 접촉 적 피해 +50%", apply: s => s.thorns += 0.5 },
 ];
 
 /* ================================================================
@@ -799,6 +802,7 @@ function buildCardPool() {
   const canRecruit = game.companions.length < CONFIG.maxDeployed;
   for (const def of COMPANION_DEFS) {
     const owned = allOwned().find(c => c.def.id === def.id);
+    const deployed = game.companions.find(c => c.def.id === def.id);
     if (!owned) {
       if (canRecruit) {
         // 의무병은 1~10웨이브에서 영입 카드 금지 (강당 합류로만 얻음)
@@ -810,16 +814,16 @@ function buildCardPool() {
           apply: () => recruitCompanion(def),
         });
       }
-    } else {
-      // 카드 우선순위 필터: 정의되어 있으면 허용된 강화만 노출
-      const allowed = def.cardFilter ? def.cardFilter(owned) : def.upgrades.map((_, i) => i);
+    } else if (deployed) {
+      // 강화 카드는 "출전 중"인 동료만 등장 (기숙사 대기 중이면 금지)
+      const allowed = def.cardFilter ? def.cardFilter(deployed) : def.upgrades.map((_, i) => i);
       def.upgrades.forEach((up, i) => {
         if (!allowed.includes(i)) return;
-        if (owned.upLv[i] >= up.maxLv) return;   // 맥스 도달 카드는 제외
+        if (deployed.upLv[i] >= up.maxLv) return;   // 맥스 도달 카드는 제외
         others.push({
-          tag: `${def.name} 강화 (${owned.upLv[i]}/${up.maxLv})`, cls: "ally",
+          tag: `${def.name} 강화 (${deployed.upLv[i]}/${up.maxLv})`, cls: "ally",
           name: up.name, desc: up.desc,
-          apply: () => { up.apply(owned); owned.upLv[i]++; owned.level++; },
+          apply: () => { up.apply(deployed); deployed.upLv[i]++; deployed.level++; },
         });
       });
     }
@@ -938,11 +942,11 @@ function refreshFacility() {
     facTitle.textContent = "📢 강당 방송실";
     facDesc.innerHTML = `방송으로 작전을 지시해 부대의 공격력을 끌어올립니다. 강화는 한 판 내내 유지됩니다.<br>
       보유 킬: <span class="kills">${game.killCount}</span> · 현재 공격력: <span class="kills">+${game.campAtk * 20}%</span>`;
-    facAction.textContent = "공격력 +20% — 100킬";
-    facAction.disabled = game.killCount < 100;
+    facAction.textContent = "공격력 +20% — 200킬";
+    facAction.disabled = game.killCount < 200;
     facAction.onclick = () => {
-      if (game.killCount < 100) return;
-      game.killCount -= 100;
+      if (game.killCount < 200) return;
+      game.killCount -= 200;
       game.campAtk++;
       refreshFacility();
     };
@@ -950,11 +954,11 @@ function refreshFacility() {
     facTitle.textContent = "⛑ 임시 양호실";
     facDesc.innerHTML = `바리케이드를 완전 수리합니다.<br>
       보유 킬: <span class="kills">${game.killCount}</span> · 바리케이드: <span class="kills">${Math.ceil(game.barricadeHp)} / ${CONFIG.barricadeMaxHp}</span>`;
-    facAction.textContent = "완전 수리 — 2킬";
-    facAction.disabled = game.killCount < 2 || game.barricadeHp >= CONFIG.barricadeMaxHp;
+    facAction.textContent = "완전 수리 — 100킬";
+    facAction.disabled = game.killCount < 100 || game.barricadeHp >= CONFIG.barricadeMaxHp;
     facAction.onclick = () => {
-      if (game.killCount < 2) return;
-      game.killCount -= 2;
+      if (game.killCount < 100) return;
+      game.killCount -= 100;
       game.barricadeHp = CONFIG.barricadeMaxHp;
       refreshFacility();
     };
@@ -1182,11 +1186,35 @@ function draw() {
   // 좀비
   for (const z of game.zombies) drawZombie(z);
 
-  // 차량
+  // 차량 (형태만 다르고 판정은 동일)
   for (const car of game.cars) {
     if (IMAGES.car) {
       ctx.drawImage(IMAGES.car, car.x - 18, car.y - 30, 36, 60);
+    } else if (car.kind === "bike") {
+      // 오토바이: 좁은 차체 + 라이더
+      ctx.fillStyle = "#8a8a92";
+      ctx.fillRect(car.x - 5, car.y - 18, 10, 36);
+      ctx.fillStyle = "#2b2b2b";
+      ctx.beginPath(); ctx.arc(car.x, car.y - 20, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(car.x, car.y + 20, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#3d5a80";
+      ctx.beginPath(); ctx.arc(car.x, car.y - 4, 6, 0, Math.PI * 2); ctx.fill();
+    } else if (car.kind === "truck") {
+      // 트럭: 캡 + 짐칸
+      ctx.fillStyle = "#7a8a5a";
+      ctx.fillRect(car.x - 14, car.y - 30, 28, 20);   // 캡 (전방)
+      ctx.fillStyle = "#5a6a48";
+      ctx.fillRect(car.x - 14, car.y - 8, 28, 38);    // 짐칸
+      ctx.fillStyle = "#d9c9a0";
+      ctx.fillRect(car.x - 9, car.y - 27, 18, 7);     // 앞유리
+    } else if (car.kind === "bus") {
+      // 버스: 길쭉한 차체 + 창문 줄
+      ctx.fillStyle = "#c9a441";
+      ctx.fillRect(car.x - 15, car.y - 35, 30, 70);
+      ctx.fillStyle = "#e8e0c0";
+      for (let wy = -26; wy <= 22; wy += 12) ctx.fillRect(car.x - 10, car.y + wy, 20, 6);
     } else {
+      // 승용차 (기본)
       ctx.fillStyle = "#c9884a";
       ctx.fillRect(car.x - 13, car.y - 26, 26, 52);
       ctx.fillStyle = "#2b2b2b";
