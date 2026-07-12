@@ -84,6 +84,44 @@
     background: rgba(5,6,8,0.6);
     color: #e8e3d8; font-size: 22px; letter-spacing: 4px; z-index: 15;
   }
+
+  /* ---- 캠프 화면 (10웨이브마다) ---- */
+  #camp-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, #2a2118 0%, #17130d 100%);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    gap: 14px; z-index: 18; text-align: center;
+  }
+  #camp-overlay .dawn { color: #d9a441; font-size: 22px; letter-spacing: 3px; font-weight: 700; }
+  #camp-overlay .dawn-sub { color: #8a8577; font-size: 13px; margin-bottom: 10px; }
+  .camp-panel {
+    width: min(330px, 88vw);
+    background: rgba(20, 24, 29, 0.85);
+    border: 1px solid #4a4030;
+    border-radius: 12px;
+    padding: 18px 16px;
+  }
+  .camp-panel h3 { color: #e8d9b8; font-size: 17px; margin-bottom: 4px; }
+  .camp-panel .info { color: #9aa3ad; font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
+  .camp-panel .kills { color: #d9a441; font-weight: 700; }
+  #camp-upgrade-btn {
+    width: 100%;
+    background: #6b5a3e; color: #f0ece1;
+    border: 1px solid #8a7550; border-radius: 8px;
+    font-size: 15px; font-weight: 700;
+    padding: 12px; cursor: pointer;
+  }
+  #camp-upgrade-btn:disabled { opacity: 0.4; }
+  #camp-upgrade-btn:active:not(:disabled) { transform: scale(0.97); }
+  #camp-depart-btn {
+    background: #c33b2e; color: #fff; border: none;
+    font-size: 16px; font-weight: 700; letter-spacing: 2px;
+    padding: 13px 46px; border-radius: 8px; cursor: pointer;
+    margin-top: 4px;
+  }
+  #camp-depart-btn:active { transform: scale(0.96); }
+  .camp-note { color: #7a746a; font-size: 12px; line-height: 1.6; padding: 0 26px; }
 </style>
 </head>
 <body>
@@ -96,6 +134,26 @@
   </div>
 
   <div id="pause-badge">PAUSED</div>
+
+  <!-- 캠프 화면: 10웨이브마다 등장 -->
+  <div id="camp-overlay">
+    <div class="dawn">☀ 날이 밝았다</div>
+    <div class="dawn-sub">생존자들이 캠프로 복귀합니다</div>
+    <div class="camp-panel">
+      <h3>🏛 마을 회관</h3>
+      <div class="info">
+        보유 킬: <span class="kills" id="camp-kills">0</span><br>
+        부대 공격력: <span class="kills" id="camp-atk">+0%</span>
+      </div>
+      <button id="camp-upgrade-btn">공격력 업그레이드 (+20%) — 3킬</button>
+    </div>
+    <div class="camp-note">
+      바리케이드가 수리되었습니다.<br>
+      출정 시 전투 강화(카드)는 초기화되지만,<br>
+      <b style="color:#6fa3d4">동료</b>와 <b style="color:#d9a441">마을 회관 업그레이드</b>는 유지됩니다.
+    </div>
+    <button id="camp-depart-btn">출정</button>
+  </div>
 
   <div id="skill-overlay">
     <h2>WAVE CLEAR</h2>
@@ -263,11 +321,17 @@ let game, stats;
 let gameSpeed = 1;
 let pausedByHide = false;
 
-function resetGame() {
+// 주인공의 전투 강화(카드로 얻은 것)만 초기화 — 캠프 출정 시에도 호출됩니다.
+function resetHeroStats() {
   stats = { fireRateMul: 1, damageMul: 1, multishot: 1, pierce: 0, knockback: 0, thorns: 0 };
+}
+
+function resetGame() {
+  resetHeroStats();
   game = {
     running: false,
     wave: 0,
+    campAtk: 0,         // 마을 회관 공격력 업그레이드 레벨 (한 판 내내 유지)
     barricadeHp: CONFIG.barricadeMaxHp,
     playerX: CONFIG.logicalWidth / 2,   // ★ 이제 x가 움직입니다
     fireCooldown: 0,
@@ -286,23 +350,37 @@ function resetGame() {
 
 /* ================================================================
    [5] 웨이브
+   ----------------------------------------------------------------
+   ★ 난이도 지수(diff)와 웨이브 번호를 분리했습니다.
+   1~10웨이브:  diff = 웨이브 그대로 (1~10)
+   11~20웨이브: diff = 웨이브 - 6  (11웨이브 = 5단계 수준부터 재상승)
+   21~30웨이브: diff = 웨이브 - 11 (21웨이브 = 10단계 수준부터 재상승)
+   → 캠프에서 강화가 초기화되어도 다시 성장할 시간을 주는 구조입니다.
    ================================================================ */
+function diffOf(n) {
+  if (n <= 10) return n;
+  if (n <= 20) return n - 6;
+  return n - 11;
+}
+
 function startWave(n) {
   game.wave = n;
-  game.spawnQueue = Math.floor(3 + n * 1.3);   // 30웨이브 기준 완만한 증가 (w10=16, w30=42)
+  const d = diffOf(n);
+  game.spawnQueue = Math.floor(3 + d * 1.3);
   game.spawnTimer = 0.5;
 }
 
 function spawnZombie() {
-  // 대형 좀비: 4웨이브부터, 확률이 서서히 증가 (최대 22%)
-  const big = game.wave >= 4 && Math.random() < Math.min(0.22, 0.05 + game.wave * 0.005);
-  const hpBase = Math.round(14 + game.wave * 3 + game.wave * game.wave * 0.15);
+  const d = diffOf(game.wave);   // 웨이브 번호가 아닌 "난이도 지수" 사용
+  // 대형 좀비: 난이도 4부터, 확률이 서서히 증가 (최대 22%)
+  const big = d >= 4 && Math.random() < Math.min(0.22, 0.05 + d * 0.005);
+  const hpBase = Math.round(14 + d * 3 + d * d * 0.15);
   game.zombies.push({
     x: 45 + Math.random() * (CONFIG.logicalWidth - 90),  // 가로 위치는 무작위
     y: -30,                                              // 화면 위에서 등장
     hp:    big ? hpBase * 3 : hpBase,
     maxHp: big ? hpBase * 3 : hpBase,
-    speed: Math.min(90, (big ? 24 : 38) + game.wave * 0.5 + Math.random() * 10),
+    speed: Math.min(90, (big ? 24 : 38) + d * 0.5 + Math.random() * 10),
     size:  big ? 30 : 17,
     big,
     attackTimer: 0,
@@ -380,7 +458,7 @@ function update(dt) {
     if (game.spawnTimer <= 0) {
       spawnZombie();
       game.spawnQueue--;
-      game.spawnTimer = Math.max(0.3, 1.3 - game.wave * 0.03);   // 30웨이브에 걸쳐 서서히 촘촘해짐
+      game.spawnTimer = Math.max(0.3, 1.3 - diffOf(game.wave) * 0.03);
     }
   }
 
@@ -412,7 +490,8 @@ function update(dt) {
       const z = game.zombies[j];
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx * dx + dy * dy < (z.size + 5) * (z.size + 5)) {
-        z.hp -= b.damage !== undefined ? b.damage : CONFIG.baseDamage * stats.damageMul;
+        // 데미지 공식: 기본 x 카드 배율 x 마을 회관 공업(+20%/레벨)
+        z.hp -= b.damage !== undefined ? b.damage : CONFIG.baseDamage * stats.damageMul * (1 + 0.2 * game.campAtk);
         z.y -= stats.knockback;   // 넉백: 위로 밀어냄
         spawnParticles(z.x, z.y, "#c33b2e", 3);
         if (--b.hitsLeft <= 0) game.bullets.splice(i, 1);
@@ -473,7 +552,11 @@ function update(dt) {
   if (game.spawnQueue === 0 && game.zombies.length === 0) {
     if (game.wave >= CONFIG.wavesPerRun) { endGame(true); return; }
     game.running = false;
-    showCardChoices();
+    if (game.wave % 10 === 0) {
+      showCamp();          // 10, 20웨이브 클리어 → 캠프 복귀
+    } else {
+      showCardChoices();
+    }
   }
 }
 
@@ -584,6 +667,47 @@ function showCardChoices() {
 }
 
 /* ================================================================
+   [9.5] 캠프 시스템 ★ 10웨이브마다의 쉬는 타임 ★
+   ----------------------------------------------------------------
+   - 화폐: 킬 (HUD의 KILL 수치가 그대로 지갑입니다. 쓰면 줄어요)
+   - 마을 회관: 3킬당 공격력 +20% (한 판 내내 유지)
+   - 출정 시: 주인공의 카드 강화는 초기화, 동료는 레벨째 유지,
+     바리케이드는 완전 수리 (날이 밝았으니까!)
+   ================================================================ */
+const campOverlay = document.getElementById("camp-overlay");
+const campKillsEl = document.getElementById("camp-kills");
+const campAtkEl = document.getElementById("camp-atk");
+const campUpgradeBtn = document.getElementById("camp-upgrade-btn");
+const campDepartBtn = document.getElementById("camp-depart-btn");
+const CAMP_UPGRADE_COST = 3;
+
+function refreshCampUI() {
+  campKillsEl.textContent = game.killCount;
+  campAtkEl.textContent = "+" + (game.campAtk * 20) + "%";
+  campUpgradeBtn.disabled = game.killCount < CAMP_UPGRADE_COST;
+}
+
+function showCamp() {
+  game.barricadeHp = CONFIG.barricadeMaxHp;   // 수리
+  resetHeroStats();                            // 주인공 강화 초기화 (동료는 그대로)
+  refreshCampUI();
+  campOverlay.style.display = "flex";
+}
+
+campUpgradeBtn.onclick = () => {
+  if (game.killCount < CAMP_UPGRADE_COST) return;
+  game.killCount -= CAMP_UPGRADE_COST;
+  game.campAtk++;
+  refreshCampUI();
+};
+
+campDepartBtn.onclick = () => {
+  campOverlay.style.display = "none";
+  startWave(game.wave + 1);
+  game.running = true;
+};
+
+/* ================================================================
    [10] 그리기 — 세로 방향
    ================================================================ */
 function draw() {
@@ -665,6 +789,13 @@ function draw() {
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "left";
   ctx.fillText(`WAVE ${game.wave}/${CONFIG.wavesPerRun}`, 12, 22);
+  if (game.campAtk > 0) {
+    ctx.fillStyle = "#d9a441";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(`⚔ +${game.campAtk * 20}%`, 100, 22);
+    ctx.fillStyle = "#e8e3d8";
+    ctx.font = "bold 14px sans-serif";
+  }
   ctx.textAlign = "right";
   ctx.fillText(`KILL ${game.killCount}`, W - 12, 22);
   ctx.textAlign = "center";
