@@ -253,6 +253,7 @@ const ASSET_URLS = {
   bomber: "assets/bomber.png",
   engineer: "assets/engineer.png",
   batter: "assets/batter.png",
+  soccer: "assets/soccer.png",
   sedan: "assets/sedan.png",           // 차량 4종 (드라이버 출격)
   bike: "assets/bike.png",
   truck: "assets/truck.png",
@@ -514,6 +515,72 @@ const COMPANION_DEFS = [
       { name: "야구부: 강타",   desc: "타격 피해 +40%",                            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
     ],
   },
+  {
+    id: "soccer", name: "축구부", color: "#d24038",
+    recruitDesc: "축구공을 차서 벽에 튕기는 랠리 공격 — 공은 바리케이드에서 멈춤",
+    mover: true,
+    initState: () => ({ dmg: 16, ballSpeed: 560, ballCount: 1, balls: [] }),
+    update(comp, dt) {
+      const R = 7;   // 공 반지름
+      // 공 개수 보충 (영입/여분의 공 직후): 발밑에 정지 상태로 생성
+      while (comp.balls.length < comp.ballCount) {
+        comp.balls.push({ x: comp.x, y: CONFIG.barricadeY - R - 1, vx: 0, vy: 0, rest: true });
+      }
+      // 이동: 쫓아갈 공(정지된 공 우선)의 x로 — 기공사(350)의 60% = 210
+      const chase = comp.balls.find(b => b.rest) || comp.balls[0];
+      if (chase) {
+        const dx = chase.x - comp.x;
+        const step = 210 * dt;
+        if (Math.abs(dx) > step) comp.x += Math.sign(dx) * step;
+        else comp.x = chase.x;
+        comp.x = Math.max(40, Math.min(W - 40, comp.x));
+      }
+      for (const ball of comp.balls) {
+        if (ball.rest) {
+          // 공에 도착하면 방어선에 가장 가까운 적을 향해 킥 (랠리!)
+          if (Math.abs(comp.x - ball.x) < 16 && game.zombies.length > 0) {
+            let target = null;
+            for (const z of game.zombies) if (!target || z.y > target.y) target = z;
+            const a = Math.atan2(target.y - ball.y, target.x - ball.x);
+            ball.vx = Math.cos(a) * comp.ballSpeed;
+            ball.vy = Math.sin(a) * comp.ballSpeed;
+            ball.rest = false;
+          }
+          continue;
+        }
+        ball.x += ball.vx * dt;
+        ball.y += ball.vy * dt;
+        // 알카노이드식 벽 반사: 좌/우/위
+        if (ball.x < R)     { ball.x = R;     ball.vx = Math.abs(ball.vx); }
+        if (ball.x > W - R) { ball.x = W - R; ball.vx = -Math.abs(ball.vx); }
+        if (ball.y < R)     { ball.y = R;     ball.vy = Math.abs(ball.vy); }
+        // 바리케이드에 닿으면 딱 정지
+        if (ball.vy > 0 && ball.y >= CONFIG.barricadeY - R) {
+          ball.y = CONFIG.barricadeY - R;
+          ball.vx = 0; ball.vy = 0; ball.rest = true;
+        }
+        // 경로상의 적 타격 (좀비별 짧은 쿨다운으로 중복 타격 방지)
+        for (let j = game.zombies.length - 1; j >= 0; j--) {
+          const z = game.zombies[j];
+          if (z.ballCd > 0) continue;
+          const dx = ball.x - z.x, dy = ball.y - z.y;
+          if (dx * dx + dy * dy < (z.size + R) * (z.size + R)) {
+            z.hp -= comp.dmg;
+            z.ballCd = 0.35;
+            spawnParticles(z.x, z.y, "#e8e8ee", 3);
+            if (z.hp <= 0) killZombie(j);
+          }
+        }
+      }
+    },
+    upgrades: [
+      { name: "축구부: 강슛 훈련",  desc: "축구공 속도 +106 (5렙 맥스 시 저격탄의 70%)", maxLv: 5, apply: c => c.ballSpeed += 106 },
+      { name: "축구부: 정조준 킥",  desc: "축구공 피해 +40%",                            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
+      { name: "축구부: 여분의 공",  desc: "축구공 +1개 (최대 2개)",                      maxLv: 1, apply: c => c.ballCount = 2 },
+    ],
+    // 카드 우선순위: 공 속도 2렙까진 속도만, 이후 셋 다 동일 확률
+    cardFilter: c => c.upLv[0] < 2 ? [0] : [0, 1, 2],
+  },
 ];
 
 /* ================================================================
@@ -612,6 +679,7 @@ function spawnZombie() {
     big,
     attackTimer: 0,
     lastCarId: 0,
+    ballCd: 0,       // 축구공 피격 쿨다운
     wobble: Math.random() * Math.PI * 2,
   });
 }
@@ -756,6 +824,7 @@ function update(dt) {
   for (let i = game.zombies.length - 1; i >= 0; i--) {
     const z = game.zombies[i];
     z.wobble += dt * 7;
+    if (z.ballCd > 0) z.ballCd -= dt;
     if (z.y < CONFIG.barricadeY - z.size - 8) {
       z.y += z.speed * dt;
     } else {
@@ -1228,6 +1297,24 @@ function draw() {
 
   // 동료
   for (const comp of game.companions) drawCompanion(comp);
+
+  // 축구공 (축구부 보유 공)
+  for (const comp of game.companions) {
+    if (!comp.balls) continue;
+    for (const ball of comp.balls) {
+      ctx.fillStyle = "#f0f0f4";
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#24161c";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, 7, 0, Math.PI * 2); ctx.stroke();
+      // 오각형 무늬 (중앙 점 + 주변 점)
+      ctx.fillStyle = "#24161c";
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ball.x - 4, ball.y - 3, 1.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ball.x + 4, ball.y - 3, 1.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ball.x, ball.y + 4.5, 1.3, 0, Math.PI * 2); ctx.fill();
+    }
+  }
 
   // 주인공
   drawPlayer(game.playerX, CONFIG.playerY);
