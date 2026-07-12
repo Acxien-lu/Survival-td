@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- 홈화면 추가 시 주소창 없이 앱처럼 열리게 하는 메타 태그 -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0d10">
+<title>SURVIVAL TD — 세로 전투</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: #0b0d10;
+    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
+  #game-wrap {
+    position: relative; width: 100%; height: 100%;
+    display: flex; justify-content: center; align-items: center;
+  }
+  canvas { display: block; background: #14181d; max-width: 100%; max-height: 100%; }
+
+  #util-bar {
+    position: absolute; top: 42px; right: 8px;
+    display: flex; flex-direction: column; gap: 8px; z-index: 5;
+  }
+  .util-btn {
+    width: 44px; height: 44px; border-radius: 10px;
+    border: 1px solid #3a4350; background: rgba(20,24,29,0.85);
+    color: #e8e3d8; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .util-btn.on { border-color: #c33b2e; color: #ff8a7a; }
+
+  #skill-overlay {
+    position: absolute; inset: 0;
+    background: rgba(5,6,8,0.84);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    gap: 14px; z-index: 10;
+  }
+  #skill-overlay h2 { color: #e8e3d8; font-size: 20px; letter-spacing: 2px; }
+  #skill-overlay .sub { color: #8a8577; font-size: 13px; margin-bottom: 8px; }
+  .skill-card {
+    width: min(330px, 88vw);
+    background: linear-gradient(160deg, #1d232b, #12161b);
+    border: 1px solid #3a4350; border-radius: 10px;
+    padding: 13px 15px; cursor: pointer;
+    transition: transform .12s, border-color .12s;
+  }
+  .skill-card:active { transform: scale(0.97); }
+  .skill-card.hero    { border-left: 4px solid #c33b2e; }
+  .skill-card.recruit { border-left: 4px solid #d9a441; }
+  .skill-card.ally    { border-left: 4px solid #4f7fae; }
+  .skill-card .tag  { font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+  .skill-card.hero    .tag { color: #e06a5c; }
+  .skill-card.recruit .tag { color: #d9a441; }
+  .skill-card.ally    .tag { color: #6fa3d4; }
+  .skill-card .name { color: #f0ece1; font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .skill-card .desc { color: #9aa3ad; font-size: 13px; margin-top: 3px; line-height: 1.4; }
+
+  #center-overlay {
+    position: absolute; inset: 0;
+    background: rgba(5,6,8,0.88);
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    gap: 16px; z-index: 20; text-align: center;
+  }
+  #center-overlay h1 { color: #e8e3d8; font-size: 30px; letter-spacing: 4px; }
+  #center-overlay h1 span { color: #c33b2e; }
+  #center-overlay p { color: #8a8577; font-size: 14px; line-height: 1.7; padding: 0 24px; }
+  #center-overlay button {
+    background: #c33b2e; color: #fff; border: none;
+    font-size: 17px; font-weight: 700; letter-spacing: 2px;
+    padding: 13px 46px; border-radius: 8px; cursor: pointer;
+  }
+  #center-overlay button:active { transform: scale(0.96); }
+
+  #pause-badge {
+    position: absolute; inset: 0; display: none;
+    justify-content: center; align-items: center;
+    background: rgba(5,6,8,0.6);
+    color: #e8e3d8; font-size: 22px; letter-spacing: 4px; z-index: 15;
+  }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="game"></canvas>
+
+  <div id="util-bar">
+    <button class="util-btn" id="speed-btn">x1</button>
+    <button class="util-btn" id="fs-btn">⛶</button>
+  </div>
+
+  <div id="pause-badge">PAUSED</div>
+
+  <div id="skill-overlay">
+    <h2>WAVE CLEAR</h2>
+    <div class="sub">하나를 선택하세요</div>
+    <div id="skill-cards"></div>
+  </div>
+
+  <div id="center-overlay">
+    <h1>SURVIVAL <span>TD</span></h1>
+    <p id="center-text">
+      위에서 몰려오는 &lt;놈들&gt;로부터 바리케이드를 지켜라.<br>
+      드래그로 주인공을 <b>좌우</b>로 이동.<br>
+      웨이브를 넘기며 <b style="color:#d9a441">동료를 영입</b>하고 강화하세요.
+    </p>
+    <button id="start-btn">전투 시작</button>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   [0] 에셋 교체 지점 — 경로만 넣으면 도형 대신 이미지로 그립니다.
+   GitHub에 올릴 때 assets 폴더를 만들어 png를 넣고
+   예: player: "assets/player.png" 처럼 상대 경로로 적으면 됩니다.
+   ================================================================ */
+const ASSET_URLS = {
+  player: "",
+  zombie: "",
+  zombieBig: "",
+  bullet: "",
+  background: "",
+  sniper: "",
+  medic: "",
+  driver: "",
+  car: "",
+};
+const IMAGES = {};
+function preloadAssets(callback) {
+  const keys = Object.keys(ASSET_URLS).filter(k => ASSET_URLS[k] !== "");
+  if (keys.length === 0) { callback(); return; }
+  let loaded = 0;
+  keys.forEach(key => {
+    const img = new Image();
+    img.src = ASSET_URLS[key];
+    img.onload = img.onerror = () => {
+      if (img.complete && img.naturalWidth > 0) IMAGES[key] = img;
+      if (++loaded === keys.length) callback();
+    };
+  });
+}
+
+/* ================================================================
+   [1] 기본 설정 — 세로 방향 좌표계
+   적: 화면 위(y=-30)에서 스폰 → 아래로 전진
+   바리케이드: 가로선 (y = barricadeY)
+   주인공: 바리케이드 아래에서 좌우 이동
+   ================================================================ */
+const CONFIG = {
+  logicalWidth: 420,
+  logicalHeight: 740,
+  barricadeY: 580,          // 방어선의 세로 위치
+  playerY: 636,             // 주인공의 고정 세로 위치 (방어선 아래)
+  barricadeMaxHp: 150,
+  baseFireInterval: 0.45,
+  baseDamage: 12,
+  baseBulletSpeed: 540,
+  wavesPerRun: 10,
+};
+
+/* ================================================================
+   [2] 동료 정의 — 이제 방어선 아래에 가로로 늘어섭니다 (xRatio)
+   ================================================================ */
+const COMPANION_DEFS = [
+  {
+    id: "sniper",
+    name: "저격수",
+    recruitDesc: "가장 체력이 높은 적을 노리는 강력한 한 발 (2.2초마다)",
+    color: "#8e6fae",
+    xRatio: 0.18,
+    initState: () => ({ level: 1, cooldown: 0, dmgMul: 1, rateMul: 1 }),
+    update(comp, dt) {
+      comp.cooldown -= dt;
+      if (comp.cooldown > 0 || game.zombies.length === 0) return;
+      let target = game.zombies[0];
+      for (const z of game.zombies) if (z.hp > target.hp) target = z;
+      const x = comp.x, y = CONFIG.playerY;
+      const a = Math.atan2(target.y - y, target.x - x);
+      game.bullets.push({
+        x, y: y - 14,
+        vx: Math.cos(a) * 780, vy: Math.sin(a) * 780,
+        hitsLeft: 2,
+        damage: 30 * comp.dmgMul,
+        sniper: true,
+      });
+      comp.cooldown = 2.2 / comp.rateMul;
+    },
+    upgrades: [
+      { name: "저격수: 대물 저격총", desc: "저격 피해 +55%",            apply: c => c.dmgMul *= 1.55 },
+      { name: "저격수: 속사 훈련",   desc: "저격 간격 -25%",            apply: c => c.rateMul *= 1.35 },
+    ],
+  },
+  {
+    id: "medic",
+    name: "의무병",
+    recruitDesc: "5초마다 바리케이드를 6 회복",
+    color: "#5b9e7d",
+    xRatio: 0.82,
+    initState: () => ({ level: 1, cooldown: 5, healAmt: 6, interval: 5 }),
+    update(comp, dt) {
+      comp.cooldown -= dt;
+      if (comp.cooldown > 0) return;
+      if (game.barricadeHp < CONFIG.barricadeMaxHp) {
+        game.barricadeHp = Math.min(CONFIG.barricadeMaxHp, game.barricadeHp + comp.healAmt);
+        spawnParticles(comp.x, CONFIG.barricadeY, "#5b9e7d", 5);
+      }
+      comp.cooldown = comp.interval;
+    },
+    upgrades: [
+      { name: "의무병: 붕대 보급",   desc: "회복량 +6",                 apply: c => c.healAmt += 6 },
+      { name: "의무병: 신속 처치",   desc: "회복 간격 -1초 (최소 2초)",  apply: c => c.interval = Math.max(2, c.interval - 1) },
+    ],
+  },
+  {
+    id: "driver",
+    name: "드라이버",
+    recruitDesc: "10초마다 차량 돌진 — 경로의 모든 적에게 35 피해",
+    color: "#c9884a",
+    xRatio: 0.5,
+    initState: () => ({ level: 1, cooldown: 4, dmg: 35, interval: 10 }),
+    update(comp, dt) {
+      comp.cooldown -= dt;
+      if (comp.cooldown > 0) return;
+      // 적이 가장 몰린 x 지점(평균)으로 위를 향해 돌진
+      let x = CONFIG.logicalWidth / 2;
+      if (game.zombies.length > 0) {
+        x = game.zombies.reduce((s, z) => s + z.x, 0) / game.zombies.length;
+      }
+      game.cars.push({ x, y: CONFIG.barricadeY - 20, speed: 420, dmg: comp.dmg, id: ++game.carSeq });
+      comp.cooldown = comp.interval;
+    },
+    upgrades: [
+      { name: "드라이버: 강판 개조", desc: "차량 피해 +30",             apply: c => c.dmg += 30 },
+      { name: "드라이버: 정비 숙련", desc: "차량 간격 -2초 (최소 4초)",  apply: c => c.interval = Math.max(4, c.interval - 2) },
+    ],
+  },
+];
+
+/* ================================================================
+   [3] 주인공 스킬 풀
+   ================================================================ */
+const HERO_SKILLS = [
+  { name: "속사",       desc: "공격 속도 +35%",             apply: s => s.fireRateMul *= 1.35 },
+  { name: "고화력 탄환", desc: "공격력 +45%",                apply: s => s.damageMul *= 1.45 },
+  { name: "더블 샷",     desc: "발사 탄환 +1 (부채꼴)",       apply: s => s.multishot += 1 },
+  { name: "관통탄",      desc: "탄환이 적 1명을 추가 관통",    apply: s => s.pierce += 1 },
+  { name: "넉백 강화",   desc: "명중 시 적을 밀어냄 +10",      apply: s => s.knockback += 10 },
+  { name: "응급 수리",   desc: "바리케이드 HP 60 회복",       apply: (s, g) => g.barricadeHp = Math.min(CONFIG.barricadeMaxHp, g.barricadeHp + 60) },
+  { name: "대구경 개조", desc: "공격력 +80%, 공격 속도 -15%", apply: s => { s.damageMul *= 1.80; s.fireRateMul *= 0.85; } },
+  { name: "철조망",      desc: "바리케이드 접촉 적 피해 +50%", apply: s => s.thorns += 0.5 },
+];
+
+/* ================================================================
+   [4] 게임 상태
+   ================================================================ */
+let game, stats;
+let gameSpeed = 1;
+let pausedByHide = false;
+
+function resetGame() {
+  stats = { fireRateMul: 1, damageMul: 1, multishot: 1, pierce: 0, knockback: 0, thorns: 0 };
+  game = {
+    running: false,
+    wave: 0,
+    barricadeHp: CONFIG.barricadeMaxHp,
+    playerX: CONFIG.logicalWidth / 2,   // ★ 이제 x가 움직입니다
+    fireCooldown: 0,
+    bullets: [],
+    zombies: [],
+    cars: [],
+    carSeq: 0,
+    companions: [],
+    spawnQueue: 0,
+    spawnTimer: 0,
+    killCount: 0,
+    hitFlash: 0,
+    particles: [],
+  };
+}
+
+/* ================================================================
+   [5] 웨이브
+   ================================================================ */
+function startWave(n) {
+  game.wave = n;
+  game.spawnQueue = 3 + n * 2;
+  game.spawnTimer = 0.5;
+}
+
+function spawnZombie() {
+  const big = game.wave >= 4 && Math.random() < 0.12;
+  const hpBase = 14 + game.wave * 5;
+  game.zombies.push({
+    x: 45 + Math.random() * (CONFIG.logicalWidth - 90),  // 가로 위치는 무작위
+    y: -30,                                              // 화면 위에서 등장
+    hp:    big ? hpBase * 3 : hpBase,
+    maxHp: big ? hpBase * 3 : hpBase,
+    speed: (big ? 24 : 38) + game.wave * 1.2 + Math.random() * 10,
+    size:  big ? 30 : 17,
+    big,
+    attackTimer: 0,
+    lastCarId: 0,
+    wobble: Math.random() * Math.PI * 2,
+  });
+}
+
+/* ================================================================
+   [6] 캔버스 / 입력 — 이제 드래그로 "좌우" 이동
+   ================================================================ */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+let scale = 1;
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  scale = Math.min(window.innerWidth / CONFIG.logicalWidth, window.innerHeight / CONFIG.logicalHeight);
+  canvas.style.width  = CONFIG.logicalWidth * scale + "px";
+  canvas.style.height = CONFIG.logicalHeight * scale + "px";
+  canvas.width  = CONFIG.logicalWidth * scale * dpr;
+  canvas.height = CONFIG.logicalHeight * scale * dpr;
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+let dragging = false;
+function onPointerDown(e) { dragging = true; onPointerMove(e); }
+function onPointerMove(e) {
+  if (!dragging || !game.running) return;
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const x = (clientX - rect.left) / scale;
+  game.playerX = Math.max(40, Math.min(CONFIG.logicalWidth - 40, x));
+}
+function onPointerUp() { dragging = false; }
+canvas.addEventListener("mousedown", onPointerDown);
+canvas.addEventListener("mousemove", onPointerMove);
+window.addEventListener("mouseup", onPointerUp);
+canvas.addEventListener("touchstart", onPointerDown, { passive: true });
+canvas.addEventListener("touchmove", onPointerMove, { passive: true });
+window.addEventListener("touchend", onPointerUp);
+
+/* ================================================================
+   [7] 편의 기능 (2배속 / 전체화면 / 자동 일시정지)
+   ================================================================ */
+const speedBtn = document.getElementById("speed-btn");
+speedBtn.onclick = () => {
+  gameSpeed = gameSpeed === 1 ? 2 : 1;
+  speedBtn.textContent = "x" + gameSpeed;
+  speedBtn.classList.toggle("on", gameSpeed === 2);
+};
+const fsBtn = document.getElementById("fs-btn");
+fsBtn.onclick = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+};
+const pauseBadge = document.getElementById("pause-badge");
+document.addEventListener("visibilitychange", () => {
+  pausedByHide = document.hidden;
+  pauseBadge.style.display = (pausedByHide && game.running) ? "flex" : "none";
+});
+pauseBadge.onclick = () => { pausedByHide = false; pauseBadge.style.display = "none"; };
+
+/* ================================================================
+   [8] 업데이트
+   ================================================================ */
+function update(dt) {
+  // 스폰
+  if (game.spawnQueue > 0) {
+    game.spawnTimer -= dt;
+    if (game.spawnTimer <= 0) {
+      spawnZombie();
+      game.spawnQueue--;
+      game.spawnTimer = Math.max(0.35, 1.3 - game.wave * 0.05);
+    }
+  }
+
+  // ★ 주인공 자동 공격: "매 발사 직전마다" 타겟을 새로 계산합니다.
+  //   기준 = 방어선(y)에 가장 근접한 적 (즉 y가 가장 큰 적).
+  //   탄환은 발사 후 직진하지만, 다음 발은 그 시점의 최근접 적을
+  //   다시 골라 쏘기 때문에 위협 순서대로 처리됩니다.
+  game.fireCooldown -= dt;
+  if (game.fireCooldown <= 0 && game.zombies.length > 0) {
+    let target = null;
+    for (const z of game.zombies) {
+      if (!target || z.y > target.y) target = z;  // 방어선에 제일 가까운 적
+    }
+    fireAt(target);
+    game.fireCooldown = CONFIG.baseFireInterval / stats.fireRateMul;
+  }
+
+  // 동료 행동
+  for (const comp of game.companions) comp.def.update(comp, dt);
+
+  // 탄환
+  for (let i = game.bullets.length - 1; i >= 0; i--) {
+    const b = game.bullets[i];
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (b.y < -40 || b.x < -40 || b.x > CONFIG.logicalWidth + 40) {
+      game.bullets.splice(i, 1); continue;
+    }
+    for (let j = game.zombies.length - 1; j >= 0; j--) {
+      const z = game.zombies[j];
+      const dx = b.x - z.x, dy = b.y - z.y;
+      if (dx * dx + dy * dy < (z.size + 5) * (z.size + 5)) {
+        z.hp -= b.damage !== undefined ? b.damage : CONFIG.baseDamage * stats.damageMul;
+        z.y -= stats.knockback;   // 넉백: 위로 밀어냄
+        spawnParticles(z.x, z.y, "#c33b2e", 3);
+        if (--b.hitsLeft <= 0) game.bullets.splice(i, 1);
+        if (z.hp <= 0) killZombie(j);
+        break;
+      }
+    }
+  }
+
+  // 차량: 아래→위로 돌진
+  for (let i = game.cars.length - 1; i >= 0; i--) {
+    const car = game.cars[i];
+    car.y -= car.speed * dt;
+    for (let j = game.zombies.length - 1; j >= 0; j--) {
+      const z = game.zombies[j];
+      if (z.lastCarId === car.id) continue;
+      if (Math.abs(car.x - z.x) < 30 + z.size && Math.abs(car.y - z.y) < 34) {
+        z.lastCarId = car.id;
+        z.hp -= car.dmg;
+        z.y -= 20;
+        spawnParticles(z.x, z.y, "#c9884a", 6);
+        if (z.hp <= 0) killZombie(j);
+      }
+    }
+    if (car.y < -60) game.cars.splice(i, 1);
+  }
+
+  // 좀비: 아래(방어선)로 전진
+  for (let i = game.zombies.length - 1; i >= 0; i--) {
+    const z = game.zombies[i];
+    z.wobble += dt * 7;
+    if (z.y < CONFIG.barricadeY - z.size - 8) {
+      z.y += z.speed * dt;
+    } else {
+      z.attackTimer -= dt;
+      if (z.attackTimer <= 0) {
+        game.barricadeHp -= z.big ? 6 : 2;
+        game.hitFlash = 0.25;
+        z.attackTimer = 1.0;
+        if (stats.thorns > 0) {
+          z.hp -= 6 * stats.thorns;
+          if (z.hp <= 0) { killZombie(i); continue; }
+        }
+      }
+    }
+  }
+
+  // 파티클 / 플래시
+  for (let i = game.particles.length - 1; i >= 0; i--) {
+    const p = game.particles[i];
+    p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+    if (p.life <= 0) game.particles.splice(i, 1);
+  }
+  if (game.hitFlash > 0) game.hitFlash -= dt;
+
+  // 승패 / 웨이브 종료
+  if (game.barricadeHp <= 0) { endGame(false); return; }
+  if (game.spawnQueue === 0 && game.zombies.length === 0) {
+    if (game.wave >= CONFIG.wavesPerRun) { endGame(true); return; }
+    game.running = false;
+    showCardChoices();
+  }
+}
+
+function fireAt(target) {
+  const dx = target.x - game.playerX, dy = target.y - CONFIG.playerY;
+  const baseAngle = Math.atan2(dy, dx);
+  const n = stats.multishot;
+  for (let k = 0; k < n; k++) {
+    const spread = n === 1 ? 0 : (k / (n - 1) - 0.5) * 0.2;
+    const a = baseAngle + spread;
+    game.bullets.push({
+      x: game.playerX, y: CONFIG.playerY - 14,
+      vx: Math.cos(a) * CONFIG.baseBulletSpeed,
+      vy: Math.sin(a) * CONFIG.baseBulletSpeed,
+      hitsLeft: 1 + stats.pierce,
+    });
+  }
+}
+
+function killZombie(index) {
+  const z = game.zombies[index];
+  spawnParticles(z.x, z.y, z.big ? "#7a9e4f" : "#5b7d3c", 10);
+  game.zombies.splice(index, 1);
+  game.killCount++;
+}
+
+function spawnParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 40 + Math.random() * 120;
+    game.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.3 + Math.random() * 0.25, color });
+  }
+}
+
+/* ================================================================
+   [9] 카드 시스템 (영입 / 동료 강화 / 주인공)
+   ================================================================ */
+function buildCardPool() {
+  const recruits = [];
+  const others = [];
+  for (const def of COMPANION_DEFS) {
+    const owned = game.companions.find(c => c.def.id === def.id);
+    if (!owned) {
+      recruits.push({
+        tag: "동료 영입", cls: "recruit",
+        name: def.name + " 영입",
+        desc: def.recruitDesc,
+        apply: () => recruitCompanion(def),
+      });
+    } else {
+      for (const up of def.upgrades) {
+        others.push({
+          tag: def.name + " 강화", cls: "ally",
+          name: up.name, desc: up.desc,
+          apply: () => { up.apply(owned); owned.level++; },
+        });
+      }
+    }
+  }
+  for (const sk of HERO_SKILLS) {
+    others.push({
+      tag: "주인공", cls: "hero",
+      name: sk.name, desc: sk.desc,
+      apply: () => sk.apply(stats, game),
+    });
+  }
+  return { recruits, others };
+}
+
+function recruitCompanion(def) {
+  game.companions.push({
+    def,
+    x: CONFIG.logicalWidth * def.xRatio,   // 방어선 아래 가로 배치
+    ...def.initState(),
+  });
+}
+
+const skillOverlay = document.getElementById("skill-overlay");
+const skillCards = document.getElementById("skill-cards");
+
+function showCardChoices() {
+  const { recruits, others } = buildCardPool();
+  const picks = [];
+  if (recruits.length > 0) {
+    picks.push(recruits.splice(Math.floor(Math.random() * recruits.length), 1)[0]);
+  }
+  const pool = [...recruits, ...others];
+  while (picks.length < 3 && pool.length > 0) {
+    picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  skillCards.innerHTML = "";
+  skillCards.style.display = "flex";
+  skillCards.style.flexDirection = "column";
+  skillCards.style.gap = "10px";
+  picks.forEach(card => {
+    const el = document.createElement("div");
+    el.className = "skill-card " + card.cls;
+    el.innerHTML = `<div class="tag">${card.tag}</div><div class="name">${card.name}</div><div class="desc">${card.desc}</div>`;
+    el.onclick = () => {
+      card.apply();
+      skillOverlay.style.display = "none";
+      startWave(game.wave + 1);
+      game.running = true;
+    };
+    skillCards.appendChild(el);
+  });
+  skillOverlay.style.display = "flex";
+}
+
+/* ================================================================
+   [10] 그리기 — 세로 방향
+   ================================================================ */
+function draw() {
+  const W = CONFIG.logicalWidth, H = CONFIG.logicalHeight;
+
+  if (IMAGES.background) {
+    ctx.drawImage(IMAGES.background, 0, 0, W, H);
+  } else {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#11151a");          // 위쪽(적 진영)은 어둡게
+    g.addColorStop(0.78, "#171c22");
+    g.addColorStop(1, "#1a2027");          // 아래(아군)는 살짝 밝게
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(255,255,255,0.04)";
+    for (let x = 60; x < W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  }
+
+  // 바리케이드: 가로선
+  const hpRatio = Math.max(0, game.barricadeHp / CONFIG.barricadeMaxHp);
+  ctx.fillStyle = hpRatio > 0.4 ? "#6b5a3e" : "#7a3b2e";
+  ctx.fillRect(10, CONFIG.barricadeY - 7, W - 20, 14);
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  for (let x = 20; x < W - 20; x += 26) ctx.fillRect(x, CONFIG.barricadeY - 7, 5, 14);
+
+  // 동료들 (방어선 아래에 늘어섬)
+  for (const comp of game.companions) drawCompanion(comp);
+
+  // 주인공
+  drawPlayer(game.playerX, CONFIG.playerY);
+
+  // 좀비
+  for (const z of game.zombies) drawZombie(z);
+
+  // 차량 (세로 방향으로 돌진)
+  for (const car of game.cars) {
+    if (IMAGES.car) {
+      ctx.drawImage(IMAGES.car, car.x - 18, car.y - 30, 36, 60);
+    } else {
+      ctx.fillStyle = "#c9884a";
+      ctx.fillRect(car.x - 13, car.y - 26, 26, 52);   // 차체 (세로)
+      ctx.fillStyle = "#2b2b2b";
+      ctx.fillRect(car.x - 9, car.y - 12, 18, 22);    // 지붕
+      ctx.beginPath(); ctx.arc(car.x - 14, car.y - 15, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(car.x + 14, car.y - 15, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(car.x - 14, car.y + 15, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(car.x + 14, car.y + 15, 6, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // 탄환
+  for (const b of game.bullets) {
+    if (IMAGES.bullet && !b.sniper) {
+      ctx.drawImage(IMAGES.bullet, b.x - 6, b.y - 6, 12, 12);
+    } else {
+      ctx.fillStyle = b.sniper ? "#c9a0ff" : "#ffd47a";
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.sniper ? 5 : 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = b.sniper ? "rgba(201,160,255,0.3)" : "rgba(255,212,122,0.3)";
+      ctx.fillRect(b.x - 1.5, b.y + 4, 3, 14);       // 궤적을 아래로
+    }
+  }
+
+  // 파티클
+  for (const p of game.particles) {
+    ctx.globalAlpha = Math.max(0, p.life * 2.5);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+
+  if (game.hitFlash > 0) {
+    ctx.fillStyle = `rgba(195,59,46,${game.hitFlash * 0.6})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // HUD
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.fillRect(0, 0, W, 34);
+  ctx.fillStyle = "#e8e3d8";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText(`WAVE ${game.wave}/${CONFIG.wavesPerRun}`, 12, 22);
+  ctx.textAlign = "right";
+  ctx.fillText(`KILL ${game.killCount}`, W - 12, 22);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#2a2f36";
+  ctx.fillRect(W / 2 - 70, 10, 140, 14);
+  ctx.fillStyle = hpRatio > 0.4 ? "#5b9e4f" : "#c33b2e";
+  ctx.fillRect(W / 2 - 70, 10, 140 * hpRatio, 14);
+  ctx.fillStyle = "#fff";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`${Math.max(0, Math.ceil(game.barricadeHp))} / ${CONFIG.barricadeMaxHp}`, W / 2, 21);
+}
+
+function drawPlayer(x, y) {
+  if (IMAGES.player) { ctx.drawImage(IMAGES.player, x - 24, y - 24, 48, 48); return; }
+  ctx.fillStyle = "#3d5a80";
+  ctx.fillRect(x - 9, y - 6, 18, 24);
+  ctx.fillStyle = "#e0b48c";
+  ctx.beginPath(); ctx.arc(x, y - 14, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#2b2b2b";
+  ctx.fillRect(x - 2.5, y - 32, 5, 18);   // 총구가 위를 향함
+}
+
+function drawCompanion(comp) {
+  const x = comp.x, y = CONFIG.playerY + 4;
+  const img = IMAGES[comp.def.id];
+  if (img) {
+    ctx.drawImage(img, x - 20, y - 24, 40, 40);
+  } else {
+    ctx.fillStyle = comp.def.color;
+    ctx.fillRect(x - 8, y - 9, 16, 20);
+    ctx.fillStyle = "#e0b48c";
+    ctx.beginPath(); ctx.arc(x, y - 16, 7, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = comp.def.color;
+  ctx.font = "bold 10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(`${comp.def.name} Lv${comp.level}`, x, y + 24);
+}
+
+function drawZombie(z) {
+  const img = z.big ? IMAGES.zombieBig : IMAGES.zombie;
+  if (img) {
+    const s = z.size * 2.4;
+    ctx.drawImage(img, z.x - s / 2, z.y - s / 2, s, s);
+  } else {
+    const sway = Math.sin(z.wobble) * 2;   // 좌우로 기우뚱대며 내려옴
+    ctx.fillStyle = z.big ? "#4c6b33" : "#5b7d3c";
+    ctx.beginPath(); ctx.arc(z.x + sway, z.y, z.size, 0, Math.PI * 2); ctx.fill();
+    // 팔: 아래(방어선 쪽)를 향해 뻗음
+    ctx.strokeStyle = z.big ? "#3c5527" : "#48632f";
+    ctx.lineWidth = z.big ? 7 : 4;
+    ctx.beginPath();
+    ctx.moveTo(z.x + sway - z.size * 0.3, z.y);
+    ctx.lineTo(z.x + sway - z.size * 0.3 + Math.sin(z.wobble * 2) * 4, z.y + z.size + 6);
+    ctx.stroke();
+    // 눈
+    ctx.fillStyle = "#c33b2e";
+    ctx.fillRect(z.x + sway - 5, z.y + z.size * 0.2, 4, 4);
+    ctx.fillRect(z.x + sway + 2, z.y + z.size * 0.2, 4, 4);
+  }
+  if (z.hp < z.maxHp) {
+    const w = z.size * 2;
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(z.x - w / 2, z.y - z.size - 12, w, 5);
+    ctx.fillStyle = "#c33b2e";
+    ctx.fillRect(z.x - w / 2, z.y - z.size - 12, w * (z.hp / z.maxHp), 5);
+  }
+}
+
+/* ================================================================
+   [11] 시작/종료 + 게임 루프
+   ================================================================ */
+const centerOverlay = document.getElementById("center-overlay");
+const centerText = document.getElementById("center-text");
+const startBtn = document.getElementById("start-btn");
+
+startBtn.onclick = () => {
+  resetGame();
+  centerOverlay.style.display = "none";
+  startWave(1);
+  game.running = true;
+};
+
+function endGame(win) {
+  game.running = false;
+  const allies = game.companions.map(c => `${c.def.name} Lv${c.level}`).join(", ") || "없음";
+  centerText.innerHTML = win
+    ? `<b style="color:#5b9e4f">생존 성공!</b><br>10웨이브 클리어 · 처치 ${game.killCount}<br>동료: ${allies}`
+    : `<b style="color:#c33b2e">바리케이드 붕괴...</b><br>WAVE ${game.wave} · 처치 ${game.killCount}<br>동료: ${allies}`;
+  startBtn.textContent = "다시 도전";
+  centerOverlay.style.display = "flex";
+}
+
+let lastTime = performance.now();
+function loop(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+  if (game.running && !pausedByHide) update(dt * gameSpeed);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+resetGame();
+preloadAssets(() => requestAnimationFrame(loop));
+</script>
+</body>
+</html>
