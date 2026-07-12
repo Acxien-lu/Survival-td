@@ -257,6 +257,7 @@ const ASSET_URLS = {
   bike: "assets/bike.png",
   truck: "assets/truck.png",
   bus: "assets/bus.png",
+  campBg: "assets/camp_bg.png",        // 강당 내부 (캠프 화면)
 };
 const IMAGES = {};
 function preloadAssets(callback) {
@@ -940,10 +941,10 @@ function showCardChoices() {
    시설을 탭하면 패널이 열립니다. 하단의 [출정] 탭으로 재출발.
    ================================================================ */
 const CAMP_ZONES = {
-  hall:   { x: W / 2 - 70, y: 250, w: 140, h: 130 },
-  medic:  { x: 30,         y: 470, w: 120, h: 110 },
-  lodge:  { x: W - 150,    y: 470, w: 120, h: 110 },
-  train:  { x: W / 2 - 60, y: 462, w: 120, h: 118 },   // 하단 중앙: 개인 훈련소
+  hall:   { x: 296,        y: 36,  w: 112, h: 80 },    // 2층 방송실 부스
+  medic:  { x: 28,         y: 122, w: 364, h: 92 },    // 무대 위 임시 양호실
+  train:  { x: 12,         y: 540, w: 126, h: 112 },   // 1층 구석 방 (개인 훈련소)
+  lodge:  { x: 286,        y: 424, w: 124, h: 146 },   // 코트 한쪽 침낭 (임시 기숙사)
   depart: { x: W / 2 - 80, y: 660, w: 160, h: 52 },
 };
 
@@ -1101,134 +1102,59 @@ function refreshLodge() {
   game.reserve.forEach(c => reserveList.appendChild(rosterRow(c, "deploy")));
 }
 
-/* ---- 캠프 장면 그리기 ---- */
-function drawCamp() {
-  // 새벽 하늘
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "#e8975a");
-  g.addColorStop(0.25, "#8a5a48");
-  g.addColorStop(0.55, "#3a2f2a");
-  g.addColorStop(1, "#211a14");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-  // 해
-  ctx.fillStyle = "rgba(255,220,150,0.9)";
-  ctx.beginPath(); ctx.arc(W * 0.75, 70, 26, 0, Math.PI * 2); ctx.fill();
-
-  // 위쪽 바리케이드 (강당 앞 방어선)
-  ctx.fillStyle = "#6b5a3e";
-  ctx.fillRect(10, 130, W - 20, 14);
-  ctx.fillStyle = "rgba(0,0,0,0.25)";
-  for (let x = 20; x < W - 20; x += 26) ctx.fillRect(x, 130, 5, 14);
-  ctx.fillStyle = "#c9b896";
-  ctx.font = "11px sans-serif";
+/* ---- 캠프 장면 그리기: 강당 내부 이미지 + 동적 라벨 ---- */
+function campLabel(text, x, y, color) {
+  ctx.font = "bold 12px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("강당 앞 바리케이드 — 이 너머는 놈들의 땅", W / 2, 122);
-  // 합류 알림
-  if (game.campNotice) {
-    ctx.fillStyle = "#6fa3d4";
-    ctx.font = "bold 12px sans-serif";
-    ctx.fillText(game.campNotice, W / 2, 168);
+  const w = ctx.measureText(text).width + 14;
+  ctx.fillStyle = "rgba(20,18,16,0.72)";
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2, y - 12, w, 18, 6);
+  ctx.fill();
+  ctx.fillStyle = color || "#e8d9b8";
+  ctx.fillText(text, x, y + 2);
+}
+
+function drawCamp() {
+  // 강당 내부 (농구 코트 + 무대 + 2층 관중석)
+  if (IMAGES.campBg) {
+    ctx.drawImage(IMAGES.campBg, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = "#8a6c48";
+    ctx.fillRect(0, 0, W, H);
   }
 
-  // ---- 마을 회관 (중앙) ----
+  // ---- 시설 라벨 (탭 유도) ----
   const hz = CAMP_ZONES.hall;
-  ctx.fillStyle = "#8a7550";                              // 본관
-  ctx.fillRect(hz.x + 15, hz.y + 45, hz.w - 30, hz.h - 65);
-  ctx.fillStyle = "#5a4c34";                              // 지붕
-  ctx.beginPath();
-  ctx.moveTo(hz.x, hz.y + 50);
-  ctx.lineTo(hz.x + hz.w / 2, hz.y);
-  ctx.lineTo(hz.x + hz.w, hz.y + 50);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#3a2f22";                              // 문
-  ctx.fillRect(hz.x + hz.w / 2 - 13, hz.y + hz.h - 55, 26, 35);
-  ctx.fillStyle = "#d9c9a0";                              // 창문
-  ctx.fillRect(hz.x + 28, hz.y + 60, 18, 18);
-  ctx.fillRect(hz.x + hz.w - 46, hz.y + 60, 18, 18);
-  ctx.fillStyle = "#e8d9b8";
-  ctx.font = "bold 15px sans-serif";
-  ctx.fillText("강당 방송실", W / 2, hz.y + hz.h + 20);
-  ctx.fillStyle = "#d9a441";
-  ctx.font = "11px sans-serif";
-  ctx.fillText(`공격력 +${game.campAtk * 20}%`, W / 2, hz.y + hz.h + 36);
-
-  // ---- 임시 의무대 (좌하) : 텐트 ----
-  const mz = CAMP_ZONES.medic;
-  ctx.fillStyle = "#7d8a72";
-  ctx.beginPath();
-  ctx.moveTo(mz.x, mz.y + mz.h - 20);
-  ctx.lineTo(mz.x + mz.w / 2, mz.y + 10);
-  ctx.lineTo(mz.x + mz.w, mz.y + mz.h - 20);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#4a5442";                              // 입구
-  ctx.beginPath();
-  ctx.moveTo(mz.x + mz.w / 2 - 16, mz.y + mz.h - 20);
-  ctx.lineTo(mz.x + mz.w / 2, mz.y + 44);
-  ctx.lineTo(mz.x + mz.w / 2 + 16, mz.y + mz.h - 20);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#c33b2e";                              // 적십자
-  ctx.fillRect(mz.x + mz.w / 2 - 4, mz.y + 22, 8, 22);
-  ctx.fillRect(mz.x + mz.w / 2 - 11, mz.y + 29, 22, 8);
-  ctx.fillStyle = "#e8d9b8";
-  ctx.font = "bold 14px sans-serif";
-  ctx.fillText("임시 양호실", mz.x + mz.w / 2, mz.y + mz.h + 8);
-
-  // ---- 숙소 (우하) : 오두막 ----
-  const lz = CAMP_ZONES.lodge;
-  ctx.fillStyle = "#6b5a48";
-  ctx.fillRect(lz.x + 10, lz.y + 35, lz.w - 20, lz.h - 55);
-  ctx.fillStyle = "#4a3c2c";
-  ctx.beginPath();
-  ctx.moveTo(lz.x, lz.y + 40);
-  ctx.lineTo(lz.x + lz.w / 2, lz.y);
-  ctx.lineTo(lz.x + lz.w, lz.y + 40);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#d9c9a0";
-  ctx.fillRect(lz.x + 24, lz.y + 48, 16, 16);
-  ctx.fillStyle = "#3a2f22";
-  ctx.fillRect(lz.x + lz.w - 44, lz.y + lz.h - 50, 22, 30);
-  ctx.fillStyle = "#e8d9b8";
-  ctx.font = "bold 14px sans-serif";
-  ctx.fillText("임시 기숙사", lz.x + lz.w / 2, lz.y + lz.h + 8);
-  ctx.fillStyle = "#6fa3d4";
-  ctx.font = "11px sans-serif";
-  ctx.fillText(`출전 ${game.companions.length}/4 · 대기 ${game.reserve.length}`, lz.x + lz.w / 2, lz.y + lz.h + 24);
-
-  // ---- 개인 훈련소 (하단 중앙) : 훈련 더미 + 과녁 ----
+  campLabel(`\uD83D\uDCE2 \ubc29\uc1a1\uc2e4 \u00b7 \uacf5\uaca9\ub825 +${game.campAtk * 20}%`, hz.x + hz.w / 2 - 24, hz.y + hz.h + 12, "#d9a441");
+  campLabel("\u26d1 \uc784\uc2dc \uc591\ud638\uc2e4 (\ubb34\ub300)", W / 2, CAMP_ZONES.medic.y + CAMP_ZONES.medic.h + 10);
   const tz = CAMP_ZONES.train;
-  ctx.fillStyle = "#4a4438";                              // 훈련 매트
-  ctx.fillRect(tz.x + 8, tz.y + tz.h - 34, tz.w - 16, 18);
-  ctx.fillStyle = "#8a7550";                              // 더미 기둥
-  ctx.fillRect(tz.x + tz.w / 2 - 4, tz.y + 34, 8, 48);
-  ctx.fillStyle = "#c9b896";                              // 더미 몸통
-  ctx.fillRect(tz.x + tz.w / 2 - 12, tz.y + 30, 24, 30);
-  // 과녁
-  ctx.fillStyle = "#e8e0c0";
-  ctx.beginPath(); ctx.arc(tz.x + tz.w / 2, tz.y + 18, 13, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "#c33b2e"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(tz.x + tz.w / 2, tz.y + 18, 8, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = "#c33b2e";
-  ctx.beginPath(); ctx.arc(tz.x + tz.w / 2, tz.y + 18, 3, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#e8d9b8";
-  ctx.font = "bold 14px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("개인 훈련소", tz.x + tz.w / 2, tz.y + tz.h + 8);
-  ctx.fillStyle = "#e06a5c";
-  ctx.font = "11px sans-serif";
-  ctx.fillText("주인공 영구 강화", tz.x + tz.w / 2, tz.y + tz.h + 24);
+  campLabel("\uD83C\uDFAF \uac1c\uc778 \ud6c8\ub828\uc18c", tz.x + tz.w / 2, tz.y - 10, "#e06a5c");
+  const lz = CAMP_ZONES.lodge;
+  campLabel(`\uD83D\uDECF \uc784\uc2dc \uae30\uc219\uc0ac \u00b7 \ucd9c\uc804 ${game.companions.length}/4`, lz.x + lz.w / 2 - 14, lz.y - 10, "#6fa3d4");
+
+  // 합류 알림
+  if (game.campNotice) {
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(20,18,16,0.72)";
+    const nw = ctx.measureText(game.campNotice).width + 16;
+    ctx.beginPath(); ctx.roundRect(W / 2 - nw / 2, 380, nw, 20, 6); ctx.fill();
+    ctx.fillStyle = "#8fd0a0";
+    ctx.fillText(game.campNotice, W / 2, 394);
+  }
 
   // ---- 상단 안내 + 보유 킬 ----
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
   ctx.fillRect(0, 0, W, 34);
   ctx.fillStyle = "#d9a441";
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText("☀ 날이 밝았다 — 강당", 12, 22);
+  ctx.fillText("\u2600 \ub0a0\uc774 \ubc1d\uc558\ub2e4 \u2014 \uac15\ub2f9", 12, 22);
   ctx.textAlign = "right";
-  ctx.fillText(`보유 킬 ${game.killCount}`, W - 12, 22);
+  ctx.fillText(`\ubcf4\uc720 \ud0ac ${game.killCount}`, W - 12, 22);
 
-  // ---- 출정 버튼 ----
+  // ---- \ucd9c\uc815 \ubc84\ud2bc ----
   const dz = CAMP_ZONES.depart;
   ctx.fillStyle = "#c33b2e";
   ctx.beginPath();
@@ -1237,10 +1163,14 @@ function drawCamp() {
   ctx.fillStyle = "#fff";
   ctx.font = "bold 18px sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("출 정", dz.x + dz.w / 2, dz.y + 33);
-  ctx.fillStyle = "#8a8577";
+  ctx.fillText("\ucd9c \uc815", dz.x + dz.w / 2, dz.y + 33);
+  ctx.fillStyle = "rgba(20,18,16,0.72)";
+  const hint = "\uc2dc\uc124\uc744 \ud0ed\ud574\uc11c \uc774\uc6a9 \u00b7 \ucd9c\uc815 \uc2dc \uce74\ub4dc \uac15\ud654 \ucd08\uae30\ud654 \u00b7 \ud6c8\ub828\uc18c\ub294 \uc601\uad6c";
   ctx.font = "11px sans-serif";
-  ctx.fillText("건물 탭 = 시설 이용 · 출정 시 전투 강화(카드) 전부 초기화 · 훈련소는 영구", W / 2, dz.y - 10);
+  const hw2 = ctx.measureText(hint).width + 14;
+  ctx.beginPath(); ctx.roundRect(W / 2 - hw2 / 2, dz.y - 24, hw2, 17, 6); ctx.fill();
+  ctx.fillStyle = "#c9b896";
+  ctx.fillText(hint, W / 2, dz.y - 11);
 }
 
 /* ================================================================
