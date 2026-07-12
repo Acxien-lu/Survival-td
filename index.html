@@ -431,7 +431,7 @@ const COMPANION_DEFS = [
     id: "engineer", name: "기공사", color: "#5aa8c9",
     recruitDesc: "좌우로 뛰며 전방 직선 사격 (사거리: 화면 세로 절반)",
     mover: true,
-    initState: () => ({ cooldown: 0, dmg: 8, chainLv: 0 }),
+    initState: () => ({ cooldown: 0, dmg: 8, chains: 2 }),
     update(comp, dt) {
       // 이동: 방어선에 가장 가까운 적의 x 위치로 (437의 -20% = 350)
       moveToNearestX(comp, dt, 350);
@@ -448,7 +448,7 @@ const COMPANION_DEFS = [
       // 명중 + 체인: 근처(W/4 이내)의 다른 적에게 튕김
       const hits = [target];
       let cur = target;
-      for (let c = 0; c < comp.chainLv; c++) {
+      for (let c = 0; c < comp.chains; c++) {
         let next = null, bestD = (W / 4) * (W / 4);
         for (const z of game.zombies) {
           if (hits.includes(z)) continue;
@@ -473,7 +473,7 @@ const COMPANION_DEFS = [
       comp.cooldown = 0.35;
     },
     upgrades: [
-      { name: "기공사: 전격 체인", desc: "공격이 근처 적 1명에게 추가로 튕김 (3렙 맥스)", maxLv: 3, apply: c => c.chainLv += 1 },
+      { name: "기공사: 전격 체인", desc: "체인 +2 (추가로 적 2명에게 튕김, 3렙 맥스)", maxLv: 3, apply: c => c.chains += 2 },
       { name: "기공사: 과부하",   desc: "피해 +40%",                                     maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
     ],
   },
@@ -487,8 +487,9 @@ const COMPANION_DEFS = [
       moveToNearestX(comp, dt, 594);
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
-      // 원형 스윙 범위: 기본 반지름 = 화면 세로의 30%, 범위 카드마다 +30% (4렙 맥스)
-      const r = H * 0.3 * Math.pow(1.3, comp.rangeLv);
+      // 원형 스윙 범위: 기본 반지름 = 화면 세로의 21% (기존 대비 -30%),
+      // 범위 카드마다 x1.465 — 3렙 맥스에서 기존 3렙(488px)과 동일한 성능
+      const r = H * 0.21 * Math.pow(1.465, comp.rangeLv);
       const r2 = r * r;
       const inner2 = (r * 0.5) * (r * 0.5);   // 중심 50% 안쪽 = 2배 데미지
       const cx0 = comp.x, cy0 = CONFIG.playerY;
@@ -527,10 +528,10 @@ const COMPANION_DEFS = [
             const a = Math.atan2(nearBall.y - cy0, nearBall.x - cx0);
             game.bullets.push({
               x: cx0, y: cy0 - 10,
-              vx: Math.cos(a) * sc.ballSpeed * 2,
-              vy: Math.sin(a) * sc.ballSpeed * 2,
+              vx: Math.cos(a) * sc.ballSpeed,   // 속도 = 축구공과 동일
+              vy: Math.sin(a) * sc.ballSpeed,
               hitsLeft: 9999,
-              damage: sc.dmg * 2,
+              damage: sc.dmg * 2,               // 피해는 축구공의 2배 유지
               baseball: true,
               hitSet: new Set(),   // 같은 적 중복 타격 방지
             });
@@ -539,7 +540,7 @@ const COMPANION_DEFS = [
       }
     },
     upgrades: [
-      { name: "야구부: 긴 배트", desc: "스윙 범위 +30% (4렙 맥스)", maxLv: 4, apply: c => c.rangeLv += 1 },
+      { name: "야구부: 긴 배트", desc: "스윙 범위 +46.5% (3렙 맥스)", maxLv: 3, apply: c => c.rangeLv += 1 },
       { name: "야구부: 강타",   desc: "타격 피해 +40%",            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
     ],
   },
@@ -838,6 +839,22 @@ function update(dt) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     if (b.y < -40 || b.y > H + 40 || b.x < -40 || b.x > W + 40) {
       game.bullets.splice(i, 1); continue;
+    }
+    // ★ 시너지: 폭탄병의 폭탄이 드라이버의 차량에 맞으면 차량 즉시 유폭!
+    //   피해 = 폭탄병 피해 + 차량 피해, 범위 = 화면 가로 1/4 고정 원형
+    if (b.bomb) {
+      let hitCar = false;
+      for (let k = game.cars.length - 1; k >= 0; k--) {
+        const car = game.cars[k];
+        if (Math.abs(b.x - car.x) < 24 && Math.abs(b.y - car.y) < 36) {
+          explode(car.x, car.y, W / 4, b.damage + car.dmg);
+          game.cars.splice(k, 1);
+          game.bullets.splice(i, 1);
+          hitCar = true;
+          break;
+        }
+      }
+      if (hitCar) continue;
     }
     for (let j = game.zombies.length - 1; j >= 0; j--) {
       const z = game.zombies[j];
