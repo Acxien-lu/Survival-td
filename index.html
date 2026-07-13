@@ -778,8 +778,7 @@ function pointerLogical(e) {
 
 let dragging = false;
 function onPointerDown(e) {
-  const p = pointerLogical(e);
-  if (game.state === "camp") { campTap(p.x, p.y); return; }
+  if (game.state === "camp") return;   // 캠프 탭은 아래 click 핸들러에서 처리
   dragging = true;
   onPointerMove(e);
 }
@@ -795,6 +794,13 @@ window.addEventListener("mouseup", onPointerUp);
 canvas.addEventListener("touchstart", onPointerDown, { passive: true });
 canvas.addEventListener("touchmove", onPointerMove, { passive: true });
 window.addEventListener("touchend", onPointerUp);
+// 캠프 건물 탭: click 시점에 처리 — touchstart로 열면 뒤따라오는
+// 합성 click이 방금 뜬 팝업의 배경을 때려 즉시 닫히는 버그가 생김
+canvas.addEventListener("click", (e) => {
+  if (game.state !== "camp") return;
+  const p = pointerLogical(e);
+  campTap(p.x, p.y);
+});
 
 /* ================================================================
    [7] 편의 기능
