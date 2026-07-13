@@ -346,13 +346,20 @@ const COMPANION_DEFS = [
   {
     id: "medic", name: "의무병", color: "#5b9e7d",
     recruitDesc: "5초마다 바리케이드 6 회복",
-    initState: () => ({ cooldown: 5, healAmt: 6, interval: 5 }),
+    initState: () => ({ cooldown: 5, healAmt: 6, interval: 5, pulseCd: 0 }),
     update(comp, dt) {
+      if (comp.pulseCd > 0) comp.pulseCd -= dt;
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
       if (game.barricadeHp < CONFIG.barricadeMaxHp) {
         game.barricadeHp = Math.min(CONFIG.barricadeMaxHp, game.barricadeHp + comp.healAmt);
         spawnParticles(comp.x, CONFIG.barricadeY, "#5b9e7d", 5);
+        // ★ 패시브: 수리가 실제로 발생하면 (10초 쿨) 바리케이드에서 위로
+        //   충격파를 발산해 적들을 화면 절반 지점까지 밀어냄
+        if (comp.pulseCd <= 0) {
+          game.pushWave = { y: CONFIG.barricadeY };
+          comp.pulseCd = 10;
+        }
       }
       comp.cooldown = comp.interval;
     },
@@ -691,6 +698,7 @@ function resetGame() {
     hitFlash: 0,
     particles: [],
     effects: [],         // 체인/폭발/스윙 이펙트
+    pushWave: null,      // 의무병 패시브 충격파 (바리케이드→위로 전진하는 파동)
   };
   resetHeroStats();
 }
@@ -901,6 +909,17 @@ function update(dt) {
       }
     }
     if (car.y < -60) game.cars.splice(i, 1);
+  }
+
+  // 의무병 충격파: 바리케이드에서 화면 절반(H*0.5)까지 위로 전진하며
+  // 파동보다 아래에 있는 적을 파면 위로 쓸어올림
+  if (game.pushWave) {
+    const waveSpeed = (CONFIG.barricadeY - H * 0.5) / 0.45;   // 약 0.45초에 도달
+    game.pushWave.y -= waveSpeed * dt;
+    for (const z of game.zombies) {
+      if (z.y > game.pushWave.y) z.y = game.pushWave.y;
+    }
+    if (game.pushWave.y <= H * 0.5) game.pushWave = null;
   }
 
   // 좀비 전진
@@ -1133,6 +1152,7 @@ function enterCamp() {
     comp.level = 1;
   }
   game.bullets = []; game.cars = []; game.particles = []; game.effects = [];
+  game.pushWave = null;
   // 날이 밝자, 안전한 캠프가 있다는 소문을 듣고 남은 동료들이 전부 합류
   const joined = [];
   for (const def of COMPANION_DEFS) {
@@ -1585,6 +1605,19 @@ function draw() {
     ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
   }
   ctx.globalAlpha = 1;
+
+  // 의무병 충격파 그리기: 위로 전진하는 초록빛 파동
+  if (game.pushWave) {
+    const wy = game.pushWave.y;
+    const grad = ctx.createLinearGradient(0, wy, 0, wy + 60);
+    grad.addColorStop(0, "rgba(120,220,170,0.45)");
+    grad.addColorStop(1, "rgba(91,158,125,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, wy, W, 60);
+    ctx.strokeStyle = "rgba(180,255,215,0.9)";      // 파동 선단
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, wy); ctx.lineTo(W, wy); ctx.stroke();
+  }
 
   if (game.hitFlash > 0) {
     ctx.fillStyle = `rgba(195,59,46,${game.hitFlash * 0.6})`;
