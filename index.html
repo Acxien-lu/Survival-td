@@ -325,6 +325,16 @@ const W = CONFIG.logicalWidth, H = CONFIG.logicalHeight;
    maxLv에 도달한 카드는 더 이상 뽑히지 않습니다.
    mover: true 인 동료는 가로로 뛰어다닙니다.
    ================================================================ */
+// 점 (px,py)와 선분 (x0,y0)-(x1,y1) 사이의 최단 거리 — 레이저 판정용
+function distToSeg(px, py, x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 === 0 ? 0 : ((px - x0) * dx + (py - y0) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const cx = x0 + dx * t, cy = y0 + dy * t;
+  return Math.hypot(px - cx, py - cy);
+}
+
 // 이동형 동료(기공사·야구부) 공용: 방어선에 가장 가까운 적의 x로 이동
 function moveToNearestX(comp, dt, speed) {
   let near = null;
@@ -724,6 +734,11 @@ function resetGame() {
     ghostCd: 6 + Math.random() * 12,
     equippedSkill: null, // 게임 동아리 특수 스킬 (id, 하나만 장착)
     skillCd: 0,
+    laserT: 0,           // 레이저 남은 시간
+    laserBeam: null,     // 레이저 빔 좌표 (그리기용)
+    bikerGang: null,     // 폭주족 출격 대기열
+    carpet: null,        // 융단 폭격 진행 상태
+    overload: null,      // 과부하 방전 진행 상태
   };
   resetHeroStats();
 }
@@ -879,6 +894,72 @@ function update(dt) {
       const sk = SPECIAL_SKILLS.find(s => s.id === game.equippedSkill);
       if (sk && sk.run()) game.skillCd = sk.cd;
     }
+  }
+
+  // --- 지속형 특수 스킬 처리 ---
+  // [레이저] 최대 체력 적을 실시간 추적, 빔 선상의 모든 적에게 도트 피해
+  if (game.laserT > 0) {
+    game.laserT -= dt;
+    let t = null;
+    for (const z of game.zombies) if (!t || z.hp > t.hp) t = z;
+    if (t) {
+      const sn = game.companions.find(c => c.def.id === "sniper");
+      const ox = sn ? sn.x : W / 2, oy = CONFIG.playerY - 14;
+      game.laserBeam = { x0: ox, y0: oy, x1: t.x, y1: t.y };
+      for (let j = game.zombies.length - 1; j >= 0; j--) {
+        const z = game.zombies[j];
+        if (distToSeg(z.x, z.y, ox, oy, t.x, t.y) < z.size + 8) {
+          z.hp -= 40 * dt;   // 초당 40 도트
+          if (z.hp <= 0) killZombie(j);
+        }
+      }
+    } else {
+      game.laserBeam = null;
+    }
+    if (game.laserT <= 0) game.laserBeam = null;
+  }
+  // [폭주족] 선택된 절반 구역에 0.5초 간격으로 차량 12대 출격
+  if (game.bikerGang) {
+    const bg2 = game.bikerGang;
+    bg2.timer -= dt;
+    if (bg2.timer <= 0 && bg2.count > 0) {
+      const kinds = ["bike", "sedan", "truck", "bus"];
+      const x = bg2.left
+        ? 30 + Math.random() * (W / 2 - 60)
+        : W / 2 + 30 + Math.random() * (W / 2 - 60);
+      game.cars.push({ x, y: CONFIG.barricadeY - 20, speed: 420, dmg: 32, id: ++game.carSeq, kind: kinds[(12 - bg2.count) % 4] });
+      bg2.count--;
+      bg2.timer = 0.5;
+    }
+    if (bg2.count <= 0) game.bikerGang = null;
+  }
+  // [융단 폭격] 5초간 초당 8발 무작위 폭격
+  if (game.carpet) {
+    game.carpet.t -= dt;
+    game.carpet.acc += dt * 8;
+    while (game.carpet.acc >= 1) {
+      game.carpet.acc -= 1;
+      explode(50 + Math.random() * (W - 100), 60 + Math.random() * 440, 50, 14, false);
+    }
+    if (game.carpet.t <= 0) game.carpet = null;
+  }
+  // [과부하 방전] 3초간 화면 전체 감전 — 0.25초마다 틱 피해 + 전기 라인
+  if (game.overload) {
+    game.overload.t -= dt;
+    game.overload.tick -= dt;
+    if (game.overload.tick <= 0) {
+      game.overload.tick = 0.25;
+      for (let j = game.zombies.length - 1; j >= 0; j--) {
+        game.zombies[j].hp -= 3;   // 3초간 총 36 피해
+        if (game.zombies[j].hp <= 0) killZombie(j);
+      }
+      // 무작위 전기 라인 2줄
+      for (let i = 0; i < 2 && game.zombies.length > 0; i++) {
+        const z = game.zombies[Math.floor(Math.random() * game.zombies.length)];
+        game.effects.push({ type: "chain", pts: [{ x: z.x, y: -10 }, { x: z.x, y: z.y }], life: 0.12 });
+      }
+    }
+    if (game.overload.t <= 0) game.overload = null;
   }
 
   // 탄환
@@ -1207,6 +1288,8 @@ function enterCamp() {
   }
   game.bullets = []; game.cars = []; game.particles = []; game.effects = [];
   game.pushWave = null;
+  game.laserT = 0; game.laserBeam = null;
+  game.bikerGang = null; game.carpet = null; game.overload = null;
   // 날이 밝자, 안전한 캠프가 있다는 소문을 듣고 남은 동료들이 전부 합류
   const joined = [];
   for (const def of COMPANION_DEFS) {
@@ -1282,66 +1365,48 @@ function refreshFacility() {
    쿨다운을 소모하지 않고 다음 기회를 기다립니다. */
 const SPECIAL_SKILLS = [
   {
-    id: "headshot", owner: "저격수", name: "헤드샷", cd: 25,
-    desc: "25초마다 최대 체력의 적을 즉시 사살",
+    id: "laser", owner: "저격수", name: "레이저", cd: 20,
+    desc: "8초간 최대 체력 적을 추적하는 관통 레이저 (쿨 20초)",
     run() {
       if (game.zombies.length === 0) return false;
-      let t = game.zombies[0];
-      for (const z of game.zombies) if (z.hp > t.hp) t = z;
-      game.effects.push({ type: "chain", pts: [{ x: t.x, y: 0 }, { x: t.x, y: t.y }], life: 0.18 });
-      t.hp = 0;
-      killZombie(game.zombies.indexOf(t));
+      game.laserT = 8;
       return true;
     },
   },
   {
-    id: "emergency", owner: "의무병", name: "긴급 수복", cd: 40,
-    desc: "바리케이드 30% 이하로 떨어지면 즉시 50 회복 (40초)",
+    id: "emergency", owner: "의무병", name: "긴급 수복", cd: 90,
+    desc: "바리케이드 30% 이하 시 발동 — 전부 회복 (쿨 1분 30초)",
     run() {
       if (game.barricadeHp > CONFIG.barricadeMaxHp * 0.3) return false;
-      game.barricadeHp = Math.min(CONFIG.barricadeMaxHp, game.barricadeHp + 50);
-      spawnParticles(W / 2, CONFIG.barricadeY, "#5b9e7d", 14);
+      game.barricadeHp = CONFIG.barricadeMaxHp;
+      spawnParticles(W / 2, CONFIG.barricadeY, "#5b9e7d", 16);
       return true;
     },
   },
   {
-    id: "madbus", owner: "드라이버", name: "폭주 버스", cd: 30,
-    desc: "30초마다 대형 버스 돌진 — 넓은 경로에 80 피해",
+    id: "bikers", owner: "드라이버", name: "폭주족", cd: 45,
+    desc: "좌/우 절반(랜덤)에 차량 12대가 0.5초 간격 연속 돌진 (쿨 45초)",
     run() {
       if (game.zombies.length === 0) return false;
-      let x = W / 2;
-      x = game.zombies.reduce((s, z) => s + z.x, 0) / game.zombies.length;
-      game.cars.push({ x, y: CONFIG.barricadeY - 20, speed: 380, dmg: 80, id: ++game.carSeq, kind: "bus", w: 54 });
+      game.bikerGang = { left: Math.random() < 0.5, count: 12, timer: 0 };
       return true;
     },
   },
   {
-    id: "carpet", owner: "폭탄병", name: "융단 폭격", cd: 30,
-    desc: "30초마다 무작위 5지점 폭격 (각 30 피해)",
+    id: "carpet", owner: "폭탄병", name: "융단 폭격", cd: 40,
+    desc: "5초간 무작위 지역에 초당 미사일 8발 폭격 (쿨 40초)",
     run() {
       if (game.zombies.length === 0) return false;
-      for (let i = 0; i < 5; i++) {
-        const x = 50 + Math.random() * (W - 100);
-        const y = 80 + Math.random() * 420;
-        explode(x, y, 70, 30, false);
-      }
+      game.carpet = { t: 5, acc: 0 };
       return true;
     },
   },
   {
-    id: "overload", owner: "기공사", name: "과부하 방전", cd: 30,
-    desc: "30초마다 화면의 모든 적에게 전격 12 피해",
+    id: "overload", owner: "기공사", name: "과부하 방전", cd: 25,
+    desc: "3초간 화면 전체에 전기가 깔림 — 모든 적 지속 감전 (쿨 25초)",
     run() {
       if (game.zombies.length === 0) return false;
-      // 번개 비주얼: 하늘에서 무작위 적 4명에게 낙뢰 라인
-      for (let i = 0; i < Math.min(4, game.zombies.length); i++) {
-        const z = game.zombies[Math.floor(Math.random() * game.zombies.length)];
-        game.effects.push({ type: "chain", pts: [{ x: z.x, y: -10 }, { x: z.x, y: z.y }], life: 0.2 });
-      }
-      for (let j = game.zombies.length - 1; j >= 0; j--) {
-        game.zombies[j].hp -= 12;
-        if (game.zombies[j].hp <= 0) killZombie(j);
-      }
+      game.overload = { t: 3, tick: 0 };
       return true;
     },
   },
@@ -1844,6 +1909,30 @@ function draw() {
     ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
   }
   ctx.globalAlpha = 1;
+
+  // 레이저 빔: 보라-흰 3중 스트로크 (최대 체력 적 추적)
+  if (game.laserBeam) {
+    const lb = game.laserBeam;
+    const flick = 0.85 + Math.random() * 0.15;
+    for (const [lw, color] of [
+      [10, `rgba(160,80,255,${0.3 * flick})`],
+      [5,  `rgba(200,140,255,${0.7 * flick})`],
+      [2,  `rgba(255,245,255,${flick})`],
+    ]) {
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = color;
+      ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(lb.x0, lb.y0); ctx.lineTo(lb.x1, lb.y1); ctx.stroke();
+    }
+    ctx.fillStyle = `rgba(255,240,255,${flick})`;   // 타격점 섬광
+    ctx.beginPath(); ctx.arc(lb.x1, lb.y1, 6, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 과부하 방전: 화면 전체에 푸른 전기 기운
+  if (game.overload) {
+    ctx.fillStyle = `rgba(100,170,255,${0.05 + Math.random() * 0.05})`;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   // 의무병 충격파 그리기: 위로 전진하는 초록빛 파동
   if (game.pushWave) {
