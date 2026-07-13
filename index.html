@@ -1200,6 +1200,8 @@ const facTitle = document.getElementById("fac-title");
 const facDesc = document.getElementById("fac-desc");
 const facAction = document.getElementById("fac-action");
 document.getElementById("fac-close").onclick = () => { facPanel.style.display = "none"; };
+// 팝업 바깥(어두운 배경) 터치로도 닫기 — 내부 박스 터치는 무시
+facPanel.onclick = (e) => { if (e.target === facPanel) facPanel.style.display = "none"; };
 
 let currentFacility = null;
 function openFacility(kind) {
@@ -1240,6 +1242,7 @@ const trainPanel = document.getElementById("train-panel");
 const trainList = document.getElementById("train-list");
 const trainKills = document.getElementById("train-kills");
 document.getElementById("train-close").onclick = () => { trainPanel.style.display = "none"; };
+trainPanel.onclick = (e) => { if (e.target === trainPanel) trainPanel.style.display = "none"; };
 const TRAIN_COST = 50;
 
 function openTrain() {
@@ -1276,6 +1279,7 @@ const deployedList = document.getElementById("deployed-list");
 const reserveList = document.getElementById("reserve-list");
 const deployCount = document.getElementById("deploy-count");
 document.getElementById("lodge-close").onclick = () => { lodgePanel.style.display = "none"; };
+lodgePanel.onclick = (e) => { if (e.target === lodgePanel) lodgePanel.style.display = "none"; };
 
 function openLodge() {
   refreshLodge();
