@@ -354,11 +354,11 @@ const COMPANION_DEFS = [
       if (game.barricadeHp < CONFIG.barricadeMaxHp) {
         game.barricadeHp = Math.min(CONFIG.barricadeMaxHp, game.barricadeHp + comp.healAmt);
         spawnParticles(comp.x, CONFIG.barricadeY, "#5b9e7d", 5);
-        // ★ 패시브: 수리가 실제로 발생하면 (10초 쿨) 바리케이드에서 위로
+        // ★ 패시브: 수리가 실제로 발생하면 (20초 쿨) 바리케이드에서 위로
         //   충격파를 발산해 적들을 화면 절반 지점까지 밀어냄
         if (comp.pulseCd <= 0) {
           game.pushWave = { y: CONFIG.barricadeY };
-          comp.pulseCd = 10;
+          comp.pulseCd = 20;
         }
       }
       comp.cooldown = comp.interval;
