@@ -699,6 +699,8 @@ function resetGame() {
     particles: [],
     effects: [],         // 체인/폭발/스윙 이펙트
     pushWave: null,      // 의무병 패시브 충격파 (바리케이드→위로 전진하는 파동)
+    ghost: null,         // 본관 창문의 귀신 (이스터에그)
+    ghostCd: 6 + Math.random() * 12,
   };
   resetHeroStats();
 }
@@ -954,6 +956,19 @@ function update(dt) {
     if (game.effects[i].life <= 0) game.effects.splice(i, 1);
   }
   if (game.hitFlash > 0) game.hitFlash -= dt;
+
+  // 본관 창문의 귀신 (이스터에그): 불 켜진 창문 4곳 중 한 곳에
+  // 8~22초 간격으로 0.5초간 사람 형상이 스쳐 지나감
+  game.ghostCd -= dt;
+  if (game.ghost) {
+    game.ghost.life -= dt;
+    if (game.ghost.life <= 0) game.ghost = null;
+  } else if (game.ghostCd <= 0) {
+    const LIT_WINDOWS = [[350, 50], [375, 50], [325, 76], [375, 76]];
+    const w = LIT_WINDOWS[Math.floor(Math.random() * LIT_WINDOWS.length)];
+    game.ghost = { wx: w[0], wy: w[1], life: 0.5 };
+    game.ghostCd = 8 + Math.random() * 14;
+  }
 
   // 승패 / 웨이브 종료 — 무한 모드: 클리어 조건 없이 계속 이어짐
   if (game.barricadeHp <= 0) { endGame(false); return; }
@@ -1407,6 +1422,20 @@ function draw() {
   ctx.textAlign = "center";
   ctx.fillText("정문", W * 0.25, 104);
   ctx.fillText("본관", W * 0.75, 104);
+
+  // 본관 창문의 귀신: 밝은 창 안에 사람 형상의 검은 실루엣
+  if (game.ghost) {
+    const gx = game.ghost.wx, gy = game.ghost.wy;
+    // 0.5초 동안 스르륵 나타났다 사라짐 (사인 곡선 페이드)
+    const a = Math.sin((1 - game.ghost.life / 0.5) * Math.PI) * 0.9;
+    ctx.fillStyle = `rgba(14,10,18,${a})`;
+    ctx.beginPath(); ctx.arc(gx + 7.5, gy + 6, 3.2, 0, Math.PI * 2); ctx.fill();   // 머리
+    ctx.beginPath();                                                               // 어깨~몸통
+    ctx.moveTo(gx + 3, gy + 17);
+    ctx.quadraticCurveTo(gx + 3, gy + 9, gx + 7.5, gy + 9);
+    ctx.quadraticCurveTo(gx + 12, gy + 9, gx + 12, gy + 17);
+    ctx.closePath(); ctx.fill();
+  }
 
   // 바리케이드
   const hpRatio = Math.max(0, game.barricadeHp / CONFIG.barricadeMaxHp);
