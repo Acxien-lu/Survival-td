@@ -350,29 +350,45 @@ function moveToNearestX(comp, dt, speed) {
 const COMPANION_DEFS = [
   {
     id: "sniper", name: "저격수", color: "#8e6fae",
-    recruitDesc: "가장 체력 높은 적 저격 (2.2초, 기본 2관통)",
-    initState: () => ({ cooldown: 0, dmgMul: 1, pierce: 2 }),
-    update(comp, dt) {
-      comp.cooldown -= dt;
-      if (comp.cooldown > 0 || game.zombies.length === 0) return;
+    recruitDesc: "가장 체력 높은 적 저격 (2초, 기본 3관통)",
+    initState: () => ({ cooldown: 0, dmgMul: 1, pierce: 3, doubleTap: false, tapQueue: 0, tapTimer: 0 }),
+    fire(comp) {
+      // 한 발 발사: 최대 체력 적 조준
+      if (game.zombies.length === 0) return;
       let target = game.zombies[0];
       for (const z of game.zombies) if (z.hp > target.hp) target = z;
       const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
       game.bullets.push({
         x: comp.x, y: CONFIG.playerY - 14,
-        vx: Math.cos(a) * 1560, vy: Math.sin(a) * 1560,   // ★ 투사체 속도 2배
+        vx: Math.cos(a) * 1560, vy: Math.sin(a) * 1560,
         hitsLeft: comp.pierce,
         damage: 30 * comp.dmgMul,
         sniper: true,
       });
-      comp.cooldown = 2.2;
+    },
+    update(comp, dt) {
+      // 확인 사살: 첫 발 후 0.3초 뒤 두 번째 탄
+      if (comp.tapQueue > 0) {
+        comp.tapTimer -= dt;
+        if (comp.tapTimer <= 0) {
+          this.fire(comp);
+          comp.tapQueue--;
+        }
+      }
+      comp.cooldown -= dt;
+      if (comp.cooldown > 0 || game.zombies.length === 0) return;
+      this.fire(comp);
+      comp.cooldown = 2.0;   // ★ 2초 고정
+      if (comp.doubleTap) { comp.tapQueue = 1; comp.tapTimer = 0.3; }
     },
     upgrades: [
-      { name: "저격수: 대물 저격총", desc: "저격 피해 +55%", maxLv: 5, apply: c => c.dmgMul *= 1.55 },
-      { name: "저격수: 철갑탄",     desc: "관통 +1",        maxLv: 3, apply: c => c.pierce += 1 },
+      { name: "저격수: 대물 저격총", desc: "저격 피해 +55%",                        maxLv: 6, apply: c => c.dmgMul *= 1.55 },
+      { name: "저격수: 철갑탄",     desc: "관통 +2",                               maxLv: 3, apply: c => c.pierce += 2 },
+      { name: "저격수: 확인 사살",   desc: "공격 방식 해금 — 0.3초 간격 2연발 사격", maxLv: 1, apply: c => c.doubleTap = true },
     ],
-    // 카드 우선순위: 관통(1번)을 1업 하기 전까진 관통 카드만 등장
-    cardFilter: c => c.upLv[1] < 1 ? [1] : [0, 1],
+    // 카드 우선순위: 관통 1업 전까진 관통만.
+    // 확인 사살은 어떤 강화든 1회 이상 후 등장 (관통 우선 규칙상 자동 충족)
+    cardFilter: c => c.upLv[1] < 1 ? [1] : [0, 1, 2],
   },
   {
     id: "medic", name: "의무병", color: "#5b9e7d",
