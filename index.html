@@ -1513,13 +1513,13 @@ function update(dt) {
 // fromBomb=true(폭탄병의 폭탄)일 때는 폭발 범위에 닿은 차량도 유폭시킴 (시너지)
 // carBlast=true(차량 유폭)일 때는 훨씬 진한 화염 이펙트를 사용
 // 폭탄 기폭: 폭탄광이면 한 지점에서 여러 번(펑 횟수) 터지고,
-//   뒤로(위로) 튀어 이전 범위와 1/4 겹치는 위치에서 또 터짐 (바운스 2회).
+//   뒤로(위로) 튀어 이전 범위와 1/2 겹치는 위치에서 또 터짐 (바운스 2회).
 function bombDetonate(b) {
   const count = Math.max(1, b.bombKing || 1);   // 지점당 폭발 횟수 (펑펑…)
   const bounces = b.bounceLeft || 0;            // 남은 바운스 (폭탄광이면 2)
   let x = b.x, y = b.y;
   const r = b.radius;
-  const step = r * 2 * 0.75;   // 뒤로 이동량: 지름의 75% → 범위 1/4 겹침
+  const step = r * 2 * 0.5;   // 뒤로 이동량: 지름의 50% → 범위 1/2 겹침
   for (let bounce = 0; bounce <= bounces; bounce++) {
     for (let p = 0; p < count; p++) {
       // 여러 번 터질 땐 살짝 랜덤 오프셋을 줘 "펑펑" 느낌
