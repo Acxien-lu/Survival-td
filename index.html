@@ -376,46 +376,95 @@ const COMPANION_DEFS = [
   {
     id: "sniper", name: "저격수", color: "#8e6fae",
     recruitDesc: "가장 체력 높은 적 저격 (2초, 기본 3관통)",
-    initState: () => ({ cooldown: 0, dmgMul: 1, pierce: 3, extraShots: 0, tapQueue: 0, tapTimer: 0, atkCount: 0 }),
-    fire(comp, isMain) {
+    initState: () => ({ cooldown: 0, dmgMul: 1, pierce: 3, extraShots: 0, tapQueue: 0, tapTimer: 0, atkCount: 0, barrageActive: false, barrageTurns: 0, barrageShotsLeft: 0, barrageTimer: 0 }),
+    fire(comp, isMain, barrage) {
       // 한 발 발사: 최대 체력 적 조준
       if (game.zombies.length === 0) return;
       let target = game.zombies[0];
       for (const z of game.zombies) if (z.hp > target.hp) target = z;
-      const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
-      const dmg = 90 * comp.dmgMul;   // 기본 피해 90 (기존 30의 3배)
-      const bullet = {
-        x: comp.x, y: CONFIG.playerY - 14,
-        vx: Math.cos(a) * 1560, vy: Math.sin(a) * 1560,
-        hitsLeft: comp.pierce,
-        damage: dmg,
-        sniper: true,
-        wide: dopaOn() ? 2 : 1,
+      const dmg = 90 * comp.dmgMul;
+      const ox = comp.x, oy = CONFIG.playerY - 14;
+
+      // 탄환 세례 중 발사 형태 결정
+      const boss = game.zombies.some(z => z.boss);
+      const converge = barrage && (game.zombies.length <= 1 || boss);   // 집중: 한 대상에 어깨동무
+      const multishot = barrage && game.medBuff && !converge;            // 의무병 버프 시 멀티샷
+
+      const mkBullet = (angle, perpOffset) => {
+        // perpOffset: 진행 방향에 수직으로 살짝 벌려 발사 (멀티샷/어깨동무 표현)
+        const px = Math.cos(angle + Math.PI / 2) * perpOffset;
+        const py = Math.sin(angle + Math.PI / 2) * perpOffset;
+        const bullet = {
+          x: ox + px, y: oy + py,
+          vx: Math.cos(angle) * 1560, vy: Math.sin(angle) * 1560,
+          hitsLeft: comp.pierce, damage: dmg, sniper: true,
+          wide: dopaOn() ? 2 : 1,
+        };
+        game.bullets.push(bullet);
+        return bullet;
       };
-      // 사감 강화: 메인 사격(확인 사살 제외)만 카운트, 4번째마다 탄에 번개 부여
-      if (game.warden && isMain) {
+
+      const aim = Math.atan2(target.y - oy, target.x - ox);
+      let mainBullet;
+      if (converge) {
+        // 적 1명 이하 or 보스: 모든 탄환이 같은 궤적으로 어깨동무 (전부 피해 적용)
+        mainBullet = mkBullet(aim, 0);
+        mkBullet(aim, -5);
+        mkBullet(aim, 5);
+      } else if (multishot) {
+        // 의무병 버프: 양 옆으로 한 발씩 (서로 다른 각도)
+        mainBullet = mkBullet(aim, 0);
+        mkBullet(aim - 0.18, 0);
+        mkBullet(aim + 0.18, 0);
+      } else {
+        mainBullet = mkBullet(aim, 0);
+      }
+
+      // 사감 강화: 메인 사격(확인 사살/세례 아닌 평시)만 카운트, 4번째마다 번개
+      if (game.warden && isMain && !barrage) {
         comp.atkCount++;
         if (comp.atkCount % 4 === 0) {
-          bullet.sniperBolt = dmg;   // 탄 근처에 탄과 동일 피해의 번개 폭발
+          mainBullet.sniperBolt = dmg;
           pushBanner("번개탄!", "#8e6fae", true);
         }
       }
-      game.bullets.push(bullet);
     },
     update(comp, dt) {
-      // 확인 사살: 첫 발 후 0.3초 간격으로 추가 연발 (카운트 제외 = isMain false)
+      // ===== 탄환 세례 (특수 스킬): 총 6턴, 턴당 (1 + 확인사살)발 =====
+      if (comp.barrageActive) {
+        comp.barrageTimer -= dt;
+        if (comp.barrageTimer <= 0) {
+          this.fire(comp, false, true);
+          comp.barrageShotsLeft--;
+          if (comp.barrageShotsLeft > 0) {
+            comp.barrageTimer = 0.3;   // 같은 턴 다음 탄
+          } else {
+            // 턴 종료
+            comp.barrageTurns--;
+            if (comp.barrageTurns > 0) {
+              comp.barrageShotsLeft = 1 + comp.extraShots;   // 다음 턴 장전
+              comp.barrageTimer = 0.3;                        // 턴 사이 0.3초
+            } else {
+              comp.barrageActive = false;   // 6턴 완료
+            }
+          }
+        }
+        return;   // 세례 중엔 평시 사격 정지
+      }
+
+      // 확인 사살: 첫 발 후 0.3초 간격으로 추가 연발
       if (comp.tapQueue > 0) {
         comp.tapTimer -= dt;
         if (comp.tapTimer <= 0) {
           this.fire(comp, false);
           comp.tapQueue--;
-          comp.tapTimer = 0.3;   // 다음 연발까지 0.3초 재장전
+          comp.tapTimer = 0.3;
         }
       }
       comp.cooldown -= dt;
       if (comp.cooldown > 0 || game.zombies.length === 0) return;
       this.fire(comp, true);
-      comp.cooldown = 2.0 / adrenMul();   // ★ 2초 고정 (아드레날린 시 단축)
+      comp.cooldown = 2.0 / adrenMul();
       if (comp.extraShots > 0) { comp.tapQueue = comp.extraShots; comp.tapTimer = 0.3; }
     },
     upgrades: [
@@ -525,7 +574,9 @@ const COMPANION_DEFS = [
       comp.cooldown -= dt;
       if (comp.cooldown > 0 || game.zombies.length === 0) return;
       // 폭발 범위: 기본 W/6, 렙업마다 커져서 3렙(맥스)에 W/4 (도파민 시 1.5배)
-      const radius = (W / 6 + (W / 4 - W / 6) * (comp.radiusLv / 3)) * dopaMul();
+      // 폭발 범위: 기본 W/6, 3렙 맥스에서 W/4의 1.3배 (30% 확대). 렙별 선형 차등.
+      const rMax = (W / 4) * 1.3;
+      const radius = (W / 6 + (rMax - W / 6) * (comp.radiusLv / 3)) * dopaMul();
       // 사감 강화: 4번째 공격마다 랜덤 적에게 대형 폭탄(가로 2/3 원형)
       comp.atkCount++;
       if (game.warden && comp.atkCount % 4 === 0) {
@@ -545,7 +596,7 @@ const COMPANION_DEFS = [
       const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
       game.bullets.push({
         x: comp.x, y: CONFIG.playerY - 14,
-        vx: Math.cos(a) * 1032, vy: Math.sin(a) * 1032,
+        vx: Math.cos(a) * 3096, vy: Math.sin(a) * 3096,   // 기본 공격 투사체 3배 속도
         hitsLeft: 1, damage: comp.dmg,
         bomb: true, radius,
       });
@@ -929,8 +980,9 @@ function resetGame() {
     equippedSkill: null, // 게임 동아리 특수 스킬 (id, 하나만 장착)
     skillCd: 0,
     warden: false,       // 사감 고용 여부 (동료 강화 공격 활성화)
-    laserT: 0,           // 레이저 남은 시간
-    laserBeam: null,     // 레이저 빔 좌표 (그리기용)
+    laserT: 0,           // 레이저 남은 시간 (미사용)
+    laserBeam: null,     // 레이저 빔 좌표 (미사용)
+    barrageFireT: 0,     // 저격수 탄환 세례 불꽃 오라 지속
     bikerGang: null,     // 폭주족 출격 대기열
     carpet: null,        // 융단 폭격 진행 상태
     overload: null,      // 과부하 방전 진행 상태
@@ -1179,6 +1231,7 @@ function update(dt) {
   }
   // [투런 홈런] 버프 타이머
   if (game.homerunT > 0) game.homerunT -= dt;
+  if (game.barrageFireT > 0) game.barrageFireT -= dt;
   // [역전승] 버프 타이머 — 종료 시 임시 공 소멸
   if (game.soccerRushT > 0) {
     game.soccerRushT -= dt;
@@ -1656,7 +1709,7 @@ function enterCamp() {
   game.drones = [];
   game.gluePots = []; game.glueZones = []; game.medBuff = null;
   game.pushWave = null;
-  game.laserT = 0; game.laserBeam = null;
+  game.laserT = 0; game.laserBeam = null; game.barrageFireT = 0;
   game.bikerGang = null; game.carpet = null; game.overload = null;
   game.homerunT = 0; game.soccerRushT = 0;
   game.specialBanners = []; game.enhanceBanners = [];
@@ -1830,11 +1883,16 @@ wardenHire.onclick = () => {
    쿨다운을 소모하지 않고 다음 기회를 기다립니다. */
 const SPECIAL_SKILLS = [
   {
-    id: "laser", owner: "저격수", name: "레이저", cd: 20,
-    desc: "8초간 최대 체력 적을 추적하는 관통 레이저 (쿨 20초)",
+    id: "barrage", owner: "저격수", name: "탄환 세례", cd: 20,
+    desc: "6턴 연속 사격 (턴당 기본+확인사살 전탄, 최대체력 조준) — 쿨 20초",
     run() {
-      if (game.zombies.length === 0) return false;
-      game.laserT = 8;
+      const sn = game.companions.find(c => c.def.id === "sniper");
+      if (!sn || game.zombies.length === 0) return false;
+      sn.barrageActive = true;
+      sn.barrageTurns = 6;
+      sn.barrageShotsLeft = 1 + sn.extraShots;
+      sn.barrageTimer = 0;
+      game.barrageFireT = 3;   // 저격수 불꽃 오라 지속 (연출)
       kiBurst("sniper");
       return true;
     },
@@ -2720,7 +2778,8 @@ function drawCompanion(comp) {
   // 지속형 특수 스킬 버프 중이면 기&오라가 동료를 감쌈
   const buffActive =
     (comp.def.id === "batter" && game.homerunT > 0) ||
-    (comp.def.id === "soccer" && game.soccerRushT > 0);
+    (comp.def.id === "soccer" && game.soccerRushT > 0) ||
+    (comp.def.id === "sniper" && game.barrageFireT > 0);
   if (buffActive) {
     // 타오르는 불꽃 오라 (활활활) — 동료를 감싸는 여러 갈래 화염
     const now = performance.now();
