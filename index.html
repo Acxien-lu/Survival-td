@@ -535,7 +535,7 @@ const COMPANION_DEFS = [
         const a2 = Math.atan2(rz.y - CONFIG.playerY, rz.x - comp.x);
         game.bullets.push({
           x: comp.x, y: CONFIG.playerY - 14,
-          vx: Math.cos(a2) * 516, vy: Math.sin(a2) * 516,
+          vx: Math.cos(a2) * 1032, vy: Math.sin(a2) * 1032,
           hitsLeft: 1, damage: comp.dmg, bomb: true, radius: (W * 2 / 3) / 2, bigbomb: true,
         });
         game.skillBanner = { text: "대형 폭탄!", color: "#b5533c", life: 1.4, plain: true };
@@ -547,7 +547,7 @@ const COMPANION_DEFS = [
       const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
       game.bullets.push({
         x: comp.x, y: CONFIG.playerY - 14,
-        vx: Math.cos(a) * 516, vy: Math.sin(a) * 516,
+        vx: Math.cos(a) * 1032, vy: Math.sin(a) * 1032,
         hitsLeft: 1, damage: comp.dmg,
         bomb: true, radius,
       });
