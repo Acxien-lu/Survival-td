@@ -1312,7 +1312,7 @@ function update(dt) {
           spawnParticles(t.x, t.y, "#ffd47a", 3);
           if (t.hp <= 0) killZombie(game.zombies.indexOf(t));
         }
-        dr.atkCd = 0.3;
+        dr.atkCd = 0.18;
       }
     } else {
       // 착지 후 잠깐 머물며 계속 공격하다 폭발
@@ -1330,7 +1330,7 @@ function update(dt) {
           game.effects.push({ type: "impact", x: t2.x, y: t2.y, life: 0.14 });
           if (t2.hp <= 0) killZombie(game.zombies.indexOf(t2));
         }
-        dr.atkCd = 0.3;
+        dr.atkCd = 0.18;
       }
       if (dr.holdT > 0.8) {
         explode(dr.x, dr.y, W / 4, dr.dmg * 2, false);
