@@ -569,7 +569,7 @@ const COMPANION_DEFS = [
   {
     id: "bomber", name: "폭탄병", color: "#b5533c",
     recruitDesc: "폭탄 투척 — 첫 명중 지점에 범위 피해 (2.5초)",
-    initState: () => ({ cooldown: 1, dmg: 18, radiusLv: 0, atkCount: 0 }),
+    initState: () => ({ cooldown: 1, dmg: 18, radiusLv: 0, atkCount: 0, bombKing: 0 }),
     update(comp, dt) {
       comp.cooldown -= dt;
       if (comp.cooldown > 0 || game.zombies.length === 0) return;
@@ -591,6 +591,7 @@ const COMPANION_DEFS = [
           x: comp.x, y: CONFIG.playerY - 14,
           vx: Math.cos(a2) * 1032, vy: Math.sin(a2) * 1032,
           hitsLeft: 1, damage: comp.dmg, bomb: true, radius: bigBase * (1 + rangeBonus), bigbomb: true,
+          bombKing: comp.bombKing, bounceLeft: comp.bombKing > 0 ? 2 : 0,
         });
         pushBanner("대형 폭탄!", "#b5533c", true);
         comp.cooldown = 2.5 / adrenMul();
@@ -604,15 +605,25 @@ const COMPANION_DEFS = [
         vx: Math.cos(a) * 800, vy: Math.sin(a) * 800,   // 기본 공격 투사체 속도
         hitsLeft: 1, damage: comp.dmg,
         bomb: true, radius,
+        bombKing: comp.bombKing, bounceLeft: comp.bombKing > 0 ? 2 : 0,
       });
       comp.cooldown = 2.5 / adrenMul();
     },
     upgrades: [
       { name: "폭탄병: 확장 폭약", desc: "폭발 범위 확대 (3렙 맥스)", maxLv: 3, apply: c => c.radiusLv += 1 },
       { name: "폭탄병: 고성능 화약", desc: "폭발 피해 +50%",          maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.5) },
+      { name: "폭탄병: 폭탄광",     desc: "폭탄이 2번 뒤로 튀며 연쇄 폭발 (펑 횟수 +1)", maxLv: 1, apply: c => c.bombKing += 1 },
     ],
-    // 카드 우선순위: 범위를 1업 하기 전까진 범위 카드만 등장
-    cardFilter: c => c.radiusLv < 1 ? [0] : [0, 1],
+    // 카드 우선순위:
+    //  - 범위 1업 전까진 범위 카드만
+    //  - 폭탄광 미보유 + 총 2렙(강화 2회) 이상이면 다음 카드는 폭탄광 확정
+    //  - 그 외엔 범위/피해 (폭탄광은 이미 보유 시 제외)
+    cardFilter: c => {
+      if (c.radiusLv < 1) return [0];
+      const totalLv = c.upLv.reduce((s, v) => s + v, 0);
+      if (c.upLv[2] < 1 && totalLv >= 2) return [2];   // 2렙 이상 & 폭탄광 없으면 확정
+      return c.upLv[2] >= 1 ? [0, 1] : [0, 1, 2];
+    },
   },
   {
     id: "engineer", name: "기공사", color: "#5aa8c9",
@@ -1293,7 +1304,7 @@ function update(dt) {
           game.bullets.splice(i, 1);
           break;
         } else if (b.bomb) {
-          explode(b.x, b.y, b.radius, b.damage, true);   // 폭탄 폭발 → 범위 내 차량 유폭 가능
+          bombDetonate(b);   // 폭발 (+폭탄광이면 뒤로 튀며 연쇄)
           game.bullets.splice(i, 1);
           break;
         } else if (b.baseball) {
@@ -1501,6 +1512,26 @@ function update(dt) {
 // 폭발: 반경 내 모든 적에게 피해.
 // fromBomb=true(폭탄병의 폭탄)일 때는 폭발 범위에 닿은 차량도 유폭시킴 (시너지)
 // carBlast=true(차량 유폭)일 때는 훨씬 진한 화염 이펙트를 사용
+// 폭탄 기폭: 폭탄광이면 한 지점에서 여러 번(펑 횟수) 터지고,
+//   뒤로(위로) 튀어 이전 범위와 1/4 겹치는 위치에서 또 터짐 (바운스 2회).
+function bombDetonate(b) {
+  const count = Math.max(1, b.bombKing || 1);   // 지점당 폭발 횟수 (펑펑…)
+  const bounces = b.bounceLeft || 0;            // 남은 바운스 (폭탄광이면 2)
+  let x = b.x, y = b.y;
+  const r = b.radius;
+  const step = r * 2 * 0.75;   // 뒤로 이동량: 지름의 75% → 범위 1/4 겹침
+  for (let bounce = 0; bounce <= bounces; bounce++) {
+    for (let p = 0; p < count; p++) {
+      // 여러 번 터질 땐 살짝 랜덤 오프셋을 줘 "펑펑" 느낌
+      const ox = p === 0 ? 0 : (Math.random() - 0.5) * r * 0.5;
+      const oy = p === 0 ? 0 : (Math.random() - 0.5) * r * 0.5;
+      explode(x + ox, y + oy, r, b.damage, true);
+    }
+    y -= step;   // 뒤(위)로 튐
+    if (y < -r) break;
+  }
+}
+
 function explode(x, y, radius, dmg, fromBomb, carBlast) {
   if (carBlast) {
     game.effects.push({ type: "carboom", x, y, r: radius, life: 0.4 });
