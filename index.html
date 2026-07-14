@@ -383,7 +383,7 @@ const COMPANION_DEFS = [
       let target = game.zombies[0];
       for (const z of game.zombies) if (z.hp > target.hp) target = z;
       const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
-      const dmg = 30 * comp.dmgMul;
+      const dmg = 90 * comp.dmgMul;   // 기본 피해 90 (기존 30의 3배)
       const bullet = {
         x: comp.x, y: CONFIG.playerY - 14,
         vx: Math.cos(a) * 1560, vy: Math.sin(a) * 1560,
