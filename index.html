@@ -582,10 +582,15 @@ const COMPANION_DEFS = [
       if (game.warden && comp.atkCount % 4 === 0) {
         const rz = game.zombies[Math.floor(Math.random() * game.zombies.length)];
         const a2 = Math.atan2(rz.y - CONFIG.playerY, rz.x - comp.x);
+        // 대형 폭탄 기본 반지름 (가로 2/3의 절반)에, 범위 카드 증가분을 30%만 반영
+        // 범위 카드 배율: 3렙 맥스에서 rMax/(W/6) 배 → 그 증가분의 30%만 적용
+        const bigBase = (W * 2 / 3) / 2;
+        const cardMul = (W / 6 + (rMax - W / 6) * (comp.radiusLv / 3)) / (W / 6);   // 도파민 제외 순수 카드 배율
+        const rangeBonus = (cardMul - 1) * 0.3;
         game.bullets.push({
           x: comp.x, y: CONFIG.playerY - 14,
           vx: Math.cos(a2) * 1032, vy: Math.sin(a2) * 1032,
-          hitsLeft: 1, damage: comp.dmg, bomb: true, radius: (W * 2 / 3) / 2, bigbomb: true,
+          hitsLeft: 1, damage: comp.dmg, bomb: true, radius: bigBase * (1 + rangeBonus), bigbomb: true,
         });
         pushBanner("대형 폭탄!", "#b5533c", true);
         comp.cooldown = 2.5 / adrenMul();
@@ -596,7 +601,7 @@ const COMPANION_DEFS = [
       const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
       game.bullets.push({
         x: comp.x, y: CONFIG.playerY - 14,
-        vx: Math.cos(a) * 3096, vy: Math.sin(a) * 3096,   // 기본 공격 투사체 3배 속도
+        vx: Math.cos(a) * 2200, vy: Math.sin(a) * 2200,   // 기본 공격 투사체 속도
         hitsLeft: 1, damage: comp.dmg,
         bomb: true, radius,
       });
