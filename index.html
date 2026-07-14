@@ -474,6 +474,25 @@ const COMPANION_DEFS = [
         comp.launchQueue = comp.fleet;
         comp.launchTimer = 0;
         comp.cooldown = comp.interval / adrenMul();
+        // 사감 강화: 이번 출격으로 누적 차량 5대 선을 넘으면, 이 출격 묶음의
+        //   차량 수(fleet)만큼 드론을 동시 출격
+        if (game.warden) {
+          const before = comp.carCount;
+          const after = comp.carCount + comp.fleet;
+          // [before+1 ... after] 구간에 5의 배수가 포함되면 발동
+          if (Math.floor(after / 5) > Math.floor(before / 5)) {
+            for (let k = 0; k < comp.fleet && game.zombies.length > 0; k++) {
+              const tx = W * 0.22 + Math.random() * W * 0.56;   // 맵 중앙 근처 랜덤
+              const ty = H * 0.30 + Math.random() * H * 0.22;
+              game.drones.push({
+                x: comp.x, y: CONFIG.barricadeY - 20,
+                tx, ty, dmg: comp.dmg, atkCd: 0, landed: false,
+              });
+            }
+            game.skillBanner = { text: "드론 출격!", color: "#c9884a", life: 1.4, plain: true };
+          }
+          comp.carCount = after;
+        }
       }
       // 대기열의 차량을 0.35초 간격으로 한 대씩, 서로 다른 타겟을 향해 발진
       if (comp.launchQueue > 0) {
@@ -489,19 +508,6 @@ const COMPANION_DEFS = [
           });
           comp.launchQueue--;
           comp.launchTimer = 0.35;
-          // 사감 강화: 차량 5대 출발마다 드론 발진 (증편 차량 모두 누적, 여러 대 공존 가능)
-          if (game.warden) {
-            comp.carCount++;
-            if (comp.carCount % 5 === 0) {
-              const tx = W * 0.3 + Math.random() * W * 0.4;   // 맵 중앙 근처 랜덤
-              const ty = H * 0.32 + Math.random() * H * 0.2;
-              game.drones.push({
-                x: comp.x, y: CONFIG.barricadeY - 20,
-                tx, ty, dmg: comp.dmg, atkCd: 0, landed: false,
-              });
-              game.skillBanner = { text: "드론 출격!", color: "#c9884a", life: 1.4, plain: true };
-            }
-          }
         }
       }
     },
