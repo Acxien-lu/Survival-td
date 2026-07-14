@@ -261,7 +261,7 @@
   <div id="warden-panel">
     <h3>🏫 체육 선생님</h3>
     <div class="hint" id="warden-hint"></div>
-    <button class="fac-action" id="warden-hire" style="width:min(300px,84vw)">사감으로 고용 — 500킬</button>
+    <button class="fac-action" id="warden-hire" style="width:min(300px,84vw)">사감으로 고용 — 300킬</button>
     <button class="fac-close" id="warden-close">닫기</button>
   </div>
 
@@ -1611,14 +1611,14 @@ function refreshWarden() {
     wardenHire.textContent = "고용 완료";
     wardenHire.disabled = true;
   } else {
-    wardenHint.innerHTML = `무서운 체육 선생님을 <b>사감</b>으로 고용하면,<br>동료들이 일정 공격마다 <b style="color:#e06a5c">강화 공격</b>을 터뜨립니다.<br>(1회 고용 시 한 판 내내 유지)`;
-    wardenHire.textContent = "사감으로 고용 — 500킬";
-    wardenHire.disabled = game.killCount < 500;
+    wardenHint.innerHTML = `무서운 체육 선생님을 <b>사감</b>으로 고용하면,<br>동료들이 일정 공격마다 <b style="color:#e06a5c">강화 공격</b>을 터뜨립니다.<br>(고용 시부터 강화 공격 사용 가능)`;
+    wardenHire.textContent = "사감으로 고용 — 300킬";
+    wardenHire.disabled = game.killCount < 300;
   }
 }
 wardenHire.onclick = () => {
-  if (game.warden || game.killCount < 500) return;
-  game.killCount -= 500;
+  if (game.warden || game.killCount < 300) return;
+  game.killCount -= 300;
   game.warden = true;
   refreshWarden();
 };
