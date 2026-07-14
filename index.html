@@ -1883,8 +1883,18 @@ function draw() {
     } else if (IMAGES.bullet && !b.sniper) {
       ctx.drawImage(IMAGES.bullet, b.x - 6, b.y - 6, 12, 12);
     } else {
-      ctx.fillStyle = b.sniper ? "#c9a0ff" : "#ffd47a";
+      ctx.fillStyle = b.sniper ? "#ff4a3a" : "#ffd47a";
       ctx.beginPath(); ctx.arc(b.x, b.y, b.sniper ? 5 : 4, 0, Math.PI * 2); ctx.fill();
+      if (b.sniper) {
+        // 붉은 궤적: 진행 반대 방향으로 짧은 잔상
+        const sp = Math.hypot(b.vx, b.vy) || 1;
+        ctx.strokeStyle = "rgba(255,74,58,0.4)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(b.x - (b.vx / sp) * 18, b.y - (b.vy / sp) * 18);
+        ctx.stroke();
+      }
     }
   }
 
