@@ -397,7 +397,7 @@ const COMPANION_DEFS = [
         comp.atkCount++;
         if (comp.atkCount % 4 === 0) {
           bullet.sniperBolt = dmg;   // 탄 근처에 탄과 동일 피해의 번개 폭발
-          game.skillBanner = { text: "번개탄!", color: "#8e6fae", life: 1.4, plain: true };
+          pushBanner("번개탄!", "#8e6fae", true);
         }
       }
       game.bullets.push(bullet);
@@ -454,10 +454,7 @@ const COMPANION_DEFS = [
           game.medBuff = { kind, t: 4 };
           const def = COMPANION_DEFS.find(d => d.id === "medic");
           game.effects.push({ type: "medki", x: comp.x, y: CONFIG.playerY, color: def.color, life: 0.5 });
-          game.skillBanner = {
-            text: kind === "adrenaline" ? "아드레날린!" : "도파민!",
-            color: "#5b9e7d", life: 1.4, plain: true,
-          };
+          pushBanner(kind === "adrenaline" ? "아드레날린!" : "도파민!", "#5b9e7d", true);
         }
       }
     },
@@ -490,7 +487,7 @@ const COMPANION_DEFS = [
                 tx, ty, dmg: comp.dmg, atkCd: 0, landed: false,
               });
             }
-            game.skillBanner = { text: "드론 출격!", color: "#c9884a", life: 1.4, plain: true };
+            pushBanner("드론 출격!", "#c9884a", true);
           }
           comp.carCount = after;
         }
@@ -539,7 +536,7 @@ const COMPANION_DEFS = [
           vx: Math.cos(a2) * 1032, vy: Math.sin(a2) * 1032,
           hitsLeft: 1, damage: comp.dmg, bomb: true, radius: (W * 2 / 3) / 2, bigbomb: true,
         });
-        game.skillBanner = { text: "대형 폭탄!", color: "#b5533c", life: 1.4, plain: true };
+        pushBanner("대형 폭탄!", "#b5533c", true);
         comp.cooldown = 2.5 / adrenMul();
         return;
       }
@@ -628,7 +625,7 @@ const COMPANION_DEFS = [
           radius: Math.sqrt(W * H / 4) / 2,  // 화면 1/4 면적의 원
           knock: 8,
         });
-        game.skillBanner = { text: "기공파!", color: "#5aa8c9", life: 1.4, plain: true };
+        pushBanner("기공파!", "#5aa8c9", true);
       }
       // 죽은 적 정리 (뒤에서부터)
       for (let j = game.zombies.length - 1; j >= 0; j--) {
@@ -668,7 +665,7 @@ const COMPANION_DEFS = [
       // 사감 강화: 실제 스윙 4번째마다 맞은 적을 맵 절반 위로 날림
       comp.atkCount++;
       const megaKnock = game.warden && comp.atkCount % 4 === 0;
-      if (megaKnock) game.skillBanner = { text: "장외 홈런!", color: "#d4c05a", life: 1.4, plain: true };
+      if (megaKnock) pushBanner("장외 홈런!", "#d4c05a", true);
       let swung = false;
       for (let j = game.zombies.length - 1; j >= 0; j--) {
         const z = game.zombies[j];
@@ -854,7 +851,7 @@ const COMPANION_DEFS = [
         rest: false, special: true, bounces: 0, restAt: ++comp.restSeq,
       });
       game.effects.push({ type: "impact", x: bx, y: CONFIG.barricadeY - 40, life: 0.15 });
-      game.skillBanner = { text: "코너킥!", color: "#d24038", life: 1.4, plain: true };
+      pushBanner("코너킥!", "#d24038", true);
     },
     upgrades: [
       { name: "축구부: 강슛 훈련",  desc: "축구공 속도 +177 (3렙 맥스 시 저격탄의 70%)", maxLv: 3, apply: c => c.ballSpeed += 177 },
@@ -939,7 +936,9 @@ function resetGame() {
     overload: null,      // 과부하 방전 진행 상태
     homerunT: 0,         // 투런 홈런 버프 남은 시간 (야구부 3배)
     soccerRushT: 0,      // 역전승 버프 남은 시간 (축구부)
-    skillBanner: null,   // 특수 스킬 발동 배너 { text, color, life }
+    skillBanner: null,   // (구) 단일 배너 — 미사용, 호환용
+    specialBanners: [],  // 게임 동아리 특수 스킬 배너 (하단 고정 자리)
+    enhanceBanners: [],  // 강화 공격 배너 (그 위로 스택, 새 것이 아래·이전 것이 위로 밀림)
   };
   resetHeroStats();
 }
@@ -1098,13 +1097,17 @@ function update(dt) {
         game.skillCd = sk.cd;
         // 발동 배너: 바리케이드 왼쪽 위에 잠깐 표시
         const def = COMPANION_DEFS.find(d => d.name === sk.owner);
-        game.skillBanner = { text: `${sk.name}!`, color: def ? def.color : "#e8e3d8", life: 1.4 };
+        pushBanner(`${sk.name}!`, def ? def.color : "#e8e3d8", false);
       }
     }
   }
-  if (game.skillBanner) {
-    game.skillBanner.life -= dt;
-    if (game.skillBanner.life <= 0) game.skillBanner = null;
+  for (let k = game.specialBanners.length - 1; k >= 0; k--) {
+    game.specialBanners[k].life -= dt;
+    if (game.specialBanners[k].life <= 0) game.specialBanners.splice(k, 1);
+  }
+  for (let k = game.enhanceBanners.length - 1; k >= 0; k--) {
+    game.enhanceBanners[k].life -= dt;
+    if (game.enhanceBanners[k].life <= 0) game.enhanceBanners.splice(k, 1);
   }
 
   // --- 지속형 특수 스킬 처리 ---
@@ -1629,7 +1632,7 @@ const CAMP_ZONES = {
   club:   { x: 16,         y: 296, w: 118, h: 110 },   // 코트 왼쪽 중간 (게임 동아리)
   train:  { x: 12,         y: 540, w: 126, h: 112 },   // 1층 구석 방 (개인 훈련소)
   lodge:  { x: 286,        y: 424, w: 124, h: 146 },   // 코트 한쪽 침낭 (임시 기숙사)
-  warden: { x: 286,        y: 300, w: 124, h: 108 },   // 기숙사 옆 (사감/체육 선생님)
+  warden: { x: 286,        y: 280, w: 124, h: 100 },   // 기숙사 옆 위쪽 (사감/체육 선생님)
   depart: { x: W / 2 - 80, y: 660, w: 160, h: 52 },
 };
 
@@ -1654,6 +1657,7 @@ function enterCamp() {
   game.laserT = 0; game.laserBeam = null;
   game.bikerGang = null; game.carpet = null; game.overload = null;
   game.homerunT = 0; game.soccerRushT = 0;
+  game.specialBanners = []; game.enhanceBanners = [];
   // 날이 밝자, 안전한 캠프가 있다는 소문을 듣고 남은 동료들이 전부 합류
   const joined = [];
   for (const def of COMPANION_DEFS) {
@@ -1906,6 +1910,19 @@ const SPECIAL_SKILLS = [
     },
   },
 ];
+
+// 배너 추가: plain=true(강화 공격/의무병 버프)는 위로 쌓이는 스택,
+//   아니면(게임 동아리 특수 스킬) 하단 고정 자리
+function pushBanner(text, color, plain) {
+  const life = plain ? 1.9 : 1.9;   // 기존 1.4 + 0.5초
+  if (plain) {
+    game.enhanceBanners.unshift({ text, color, life, born: performance.now() });
+    if (game.enhanceBanners.length > 5) game.enhanceBanners.pop();
+  } else {
+    game.specialBanners.unshift({ text, color, life, born: performance.now() });
+    if (game.specialBanners.length > 3) game.specialBanners.pop();
+  }
+}
 
 // 기(차크라) 연출: 스킬 발동 순간, 해당 동료에게서 기둥이 하늘로 솟음
 function kiBurst(defId) {
@@ -2559,81 +2576,82 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(0, wy); ctx.lineTo(W, wy); ctx.stroke();
   }
 
-  // 특수 스킬 발동 배너
-  if (game.skillBanner) {
-    const b = game.skillBanner;
-    const total = 1.4;
-    if (b.plain) {
-      // 강화 공격/의무병 버프: 기존 단순 스타일 (슬라이드 인 + 페이드)
-      const tIn = Math.min(1, (total - b.life) / 0.18);
-      const tOut = Math.min(1, b.life / 0.4);
-      const a = Math.min(tIn, tOut);
-      const bx = 14 - (1 - tIn) * 30;
-      const by = CONFIG.barricadeY - 28;
-      ctx.font = "bold 17px sans-serif";
-      ctx.textAlign = "left";
-      const tw = ctx.measureText(b.text).width;
-      ctx.globalAlpha = a * 0.65;
-      ctx.fillStyle = "rgba(10,10,14,1)";
-      ctx.beginPath(); ctx.roundRect(bx - 6, by - 17, tw + 16, 24, 6); ctx.fill();
-      ctx.globalAlpha = a;
-      ctx.fillStyle = b.color;
-      ctx.fillText(b.text, bx, by);
-      ctx.globalAlpha = 1;
-    } else {
-      // 게임 동아리 특수 스킬: 번개 테마 (튀어오름 + 지그재그 테두리 + 번쩍임)
-      const prog = total - b.life;
-      const tIn = Math.min(1, prog / 0.22);
-      const tOut = Math.min(1, b.life / 0.45);
-      const a = Math.min(tIn, tOut);
-      const overshoot = tIn < 1 ? (1 - Math.pow(1 - tIn, 3)) * 1.12 - 0.12 : 1;
-      const by = CONFIG.barricadeY - 30;
-      const bx = 16 - (1 - overshoot) * 40;
-      const flashing = prog < 0.12;
-      const jitter = flashing ? (Math.random() - 0.5) * 4 : (Math.random() - 0.5) * 1.2;
-      ctx.save();
-      ctx.translate(bx + jitter, by + jitter);
-      ctx.font = "italic 900 20px 'Arial Black', Impact, sans-serif";
-      ctx.textAlign = "left";
-      const tw = ctx.measureText(b.text).width;
-      const padX = 12, boxH = 28, boxY = -21;
-      function boltPath(x0, y0, x1, y1, segs, amp) {
-        const path = [];
-        for (let i = 0; i <= segs; i++) {
-          const t = i / segs;
-          const off = (i % 2 === 0 ? amp : -amp) * (i === 0 || i === segs ? 0 : 1);
-          path.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t + off]);
-        }
-        return path;
-      }
-      const bw = tw + padX * 2;
-      ctx.beginPath();
-      const top = boltPath(-padX, boxY, bw - padX, boxY, 7, 3);
-      const bot = boltPath(bw - padX, boxY + boxH, -padX, boxY + boxH, 7, 3);
-      [...top, ...bot].forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
-      ctx.closePath();
-      ctx.globalAlpha = a * 0.8;
-      ctx.fillStyle = "rgba(8,8,14,1)";
-      ctx.fill();
-      ctx.globalAlpha = a;
-      ctx.lineWidth = flashing ? 3.5 : 2;
-      ctx.strokeStyle = flashing ? "#ffffff" : b.color;
-      ctx.shadowColor = b.color;
-      ctx.shadowBlur = flashing ? 18 : 10;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = a;
-      ctx.fillStyle = flashing ? "#ffffff" : b.color;
-      ctx.fillText(b.text, 0, 0);
-      if (!flashing) {
-        ctx.globalAlpha = a * 0.5;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(b.text, -0.5, -0.5);
-      }
-      ctx.restore();
-      ctx.globalAlpha = 1;
-    }
+  // 특수 스킬 배너 (하단 고정 자리 = 강화 배너의 기준선)
+  const bannerBaseY = CONFIG.barricadeY - 28;
+  function drawPlainBanner(b, y) {
+    const total = 1.9;
+    const tIn = Math.min(1, (total - b.life) / 0.18);
+    const tOut = Math.min(1, b.life / 0.4);
+    const a = Math.min(tIn, tOut);
+    const bx = 14 - (1 - tIn) * 30;
+    ctx.font = "bold 17px sans-serif";
+    ctx.textAlign = "left";
+    const tw = ctx.measureText(b.text).width;
+    ctx.globalAlpha = a * 0.65;
+    ctx.fillStyle = "rgba(10,10,14,1)";
+    ctx.beginPath(); ctx.roundRect(bx - 6, y - 17, tw + 16, 24, 6); ctx.fill();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = b.color;
+    ctx.fillText(b.text, bx, y);
+    ctx.globalAlpha = 1;
   }
+  function drawSpecialBanner(b, y) {
+    const total = 1.9;
+    const prog = total - b.life;
+    const tIn = Math.min(1, prog / 0.22);
+    const tOut = Math.min(1, b.life / 0.45);
+    const a = Math.min(tIn, tOut);
+    const overshoot = tIn < 1 ? (1 - Math.pow(1 - tIn, 3)) * 1.12 - 0.12 : 1;
+    const bx = 16 - (1 - overshoot) * 40;
+    const flashing = prog < 0.12;
+    const jitter = flashing ? (Math.random() - 0.5) * 4 : (Math.random() - 0.5) * 1.2;
+    ctx.save();
+    ctx.translate(bx + jitter, y + jitter);
+    ctx.font = "italic 900 20px 'Arial Black', Impact, sans-serif";
+    ctx.textAlign = "left";
+    const tw = ctx.measureText(b.text).width;
+    const padX = 12, boxH = 28, boxY = -21;
+    function boltPath(x0, y0, x1, y1, segs, amp) {
+      const path = [];
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const off = (i % 2 === 0 ? amp : -amp) * (i === 0 || i === segs ? 0 : 1);
+        path.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t + off]);
+      }
+      return path;
+    }
+    const bw = tw + padX * 2;
+    ctx.beginPath();
+    const top = boltPath(-padX, boxY, bw - padX, boxY, 7, 3);
+    const bot = boltPath(bw - padX, boxY + boxH, -padX, boxY + boxH, 7, 3);
+    [...top, ...bot].forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+    ctx.closePath();
+    ctx.globalAlpha = a * 0.8;
+    ctx.fillStyle = "rgba(8,8,14,1)";
+    ctx.fill();
+    ctx.globalAlpha = a;
+    ctx.lineWidth = flashing ? 3.5 : 2;
+    ctx.strokeStyle = flashing ? "#ffffff" : b.color;
+    ctx.shadowColor = b.color;
+    ctx.shadowBlur = flashing ? 18 : 10;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = flashing ? "#ffffff" : b.color;
+    ctx.fillText(b.text, 0, 0);
+    if (!flashing) {
+      ctx.globalAlpha = a * 0.5;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(b.text, -0.5, -0.5);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+  // 특수 스킬: 하단 고정 자리 (여러 개면 최신만 표시하되 살짝 겹쳐)
+  game.specialBanners.forEach((b, i) => drawSpecialBanner(b, bannerBaseY - i * 4));
+  // 강화 공격: 특수 배너 위로 스택 (최신이 아래, 이전 것이 위로 밀려남)
+  const enhStartY = bannerBaseY - 34;   // 특수 자리보다 한 칸 위에서 시작
+  game.enhanceBanners.forEach((b, i) => drawPlainBanner(b, enhStartY - i * 26));
 
   if (game.hitFlash > 0) {
     ctx.fillStyle = `rgba(195,59,46,${game.hitFlash * 0.6})`;
