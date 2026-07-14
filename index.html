@@ -233,7 +233,7 @@
   <!-- 개인 훈련소 패널: 주인공 영구 강화 -->
   <div id="train-panel">
     <h3>🎯 개인 훈련소</h3>
-    <div class="hint">보유 킬: <span id="train-kills" style="color:#d9a441; font-weight:700">0</span> · 구매마다 가격 2배 · <b style="color:#e06a5c">영구 유지</b></div>
+    <div class="hint">보유 킬: <span id="train-kills" style="color:#d9a441; font-weight:700">0</span> · 강화당 50킬 · <b style="color:#e06a5c">영구 유지</b></div>
     <div class="lodge-section" id="train-list"></div>
     <button class="fac-close" id="train-close">닫기</button>
   </div>
@@ -1566,7 +1566,7 @@ function refreshTrain() {
   trainList.innerHTML = "";
   for (const sk of HERO_SKILLS) {
     const cnt = game.trainCounts[sk.name] || 0;
-    const cost = 50 * Math.pow(2, cnt);   // 구매마다 2배: 50→100→200→400...
+    const cost = 50;   // 균일가 (가격 배증 삭제 — 난이도 조정)
     const maxed = (sk.trainMax && cnt >= sk.trainMax) ||
                   (sk.available && !sk.available(game.permHero));
     const row = document.createElement("div");
