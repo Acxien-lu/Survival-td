@@ -601,7 +601,7 @@ const COMPANION_DEFS = [
       const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
       game.bullets.push({
         x: comp.x, y: CONFIG.playerY - 14,
-        vx: Math.cos(a) * 2200, vy: Math.sin(a) * 2200,   // 기본 공격 투사체 속도
+        vx: Math.cos(a) * 1500, vy: Math.sin(a) * 1500,   // 기본 공격 투사체 속도
         hitsLeft: 1, damage: comp.dmg,
         bomb: true, radius,
       });
