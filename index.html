@@ -396,6 +396,7 @@ const COMPANION_DEFS = [
         comp.atkCount++;
         if (comp.atkCount % 4 === 0) {
           bullet.sniperBolt = dmg;   // 탄 근처에 탄과 동일 피해의 번개 폭발
+          game.skillBanner = { text: "번개탄!", color: "#8e6fae", life: 1.4 };
         }
       }
       game.bullets.push(bullet);
@@ -497,6 +498,7 @@ const COMPANION_DEFS = [
                 x: comp.x, y: CONFIG.barricadeY - 20,
                 tx, ty, dmg: comp.dmg, atkCd: 0, landed: false,
               });
+              game.skillBanner = { text: "드론 출격!", color: "#c9884a", life: 1.4 };
             }
           }
         }
@@ -529,6 +531,7 @@ const COMPANION_DEFS = [
           vx: Math.cos(a2) * 516, vy: Math.sin(a2) * 516,
           hitsLeft: 1, damage: comp.dmg, bomb: true, radius: (W * 2 / 3) / 2, bigbomb: true,
         });
+        game.skillBanner = { text: "대형 폭탄!", color: "#b5533c", life: 1.4 };
         comp.cooldown = 2.5 / adrenMul();
         return;
       }
@@ -617,6 +620,7 @@ const COMPANION_DEFS = [
           radius: Math.sqrt(W * H / 4) / 2,  // 화면 1/4 면적의 원
           knock: 8,
         });
+        game.skillBanner = { text: "기공파!", color: "#5aa8c9", life: 1.4 };
       }
       // 죽은 적 정리 (뒤에서부터)
       for (let j = game.zombies.length - 1; j >= 0; j--) {
@@ -649,6 +653,7 @@ const COMPANION_DEFS = [
       // 사감 강화: 4번째 스윙에 맞은 적은 맵 절반 위로 날아감
       comp.atkCount++;
       const megaKnock = game.warden && comp.atkCount % 4 === 0;
+      if (megaKnock) game.skillBanner = { text: "장외 홈런!", color: "#d4c05a", life: 1.4 };
       let swung = false;
       for (let j = game.zombies.length - 1; j >= 0; j--) {
         const z = game.zombies[j];
@@ -834,6 +839,7 @@ const COMPANION_DEFS = [
         rest: false, special: true, bounces: 0, restAt: ++comp.restSeq,
       });
       game.effects.push({ type: "impact", x: bx, y: CONFIG.barricadeY - 40, life: 0.15 });
+      game.skillBanner = { text: "코너킥!", color: "#d24038", life: 1.4 };
     },
     upgrades: [
       { name: "축구부: 강슛 훈련",  desc: "축구공 속도 +177 (3렙 맥스 시 저격탄의 70%)", maxLv: 3, apply: c => c.ballSpeed += 177 },
@@ -2414,24 +2420,69 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(0, wy); ctx.lineTo(W, wy); ctx.stroke();
   }
 
-  // 특수 스킬 발동 배너: 바리케이드 왼쪽 살짝 위, 스르륵 나타났다 사라짐
+  // 특수 스킬 발동 배너: 번개 테마 — 튀어오르며 등장, 지그재그 테두리, 번쩍임
   if (game.skillBanner) {
     const b = game.skillBanner;
     const total = 1.4;
-    const tIn = Math.min(1, (total - b.life) / 0.18);   // 등장 (0.18초)
-    const tOut = Math.min(1, b.life / 0.4);             // 소멸 (마지막 0.4초)
+    const prog = total - b.life;                       // 경과 시간
+    const tIn = Math.min(1, prog / 0.22);              // 등장 (0.22초)
+    const tOut = Math.min(1, b.life / 0.45);           // 소멸 (마지막 0.45초)
     const a = Math.min(tIn, tOut);
-    const bx = 14 - (1 - tIn) * 30;                     // 왼쪽에서 슬라이드 인
-    const by = CONFIG.barricadeY - 28;
-    ctx.font = "bold 17px sans-serif";
+    // 등장: 뒤로 살짝 오버슈트했다 제자리로 튀어오르는 이징
+    const overshoot = tIn < 1 ? (1 - Math.pow(1 - tIn, 3)) * 1.12 - 0.12 : 1;
+    const by = CONFIG.barricadeY - 30;
+    const bx = 16 - (1 - overshoot) * 40;
+    // 등장 직후 0.12초간 번쩍이는 글리치 + 상시 미세 지터
+    const flashing = prog < 0.12;
+    const jitter = flashing ? (Math.random() - 0.5) * 4 : (Math.random() - 0.5) * 1.2;
+
+    ctx.save();
+    ctx.translate(bx + jitter, by + jitter);
+    ctx.font = "italic 900 20px 'Arial Black', Impact, sans-serif";
     ctx.textAlign = "left";
     const tw = ctx.measureText(b.text).width;
-    ctx.globalAlpha = a * 0.65;
-    ctx.fillStyle = "rgba(10,10,14,1)";
-    ctx.beginPath(); ctx.roundRect(bx - 6, by - 17, tw + 16, 24, 6); ctx.fill();
+    const padX = 12, boxH = 28, boxY = -21;
+
+    // 지그재그(번개) 테두리 경로 생성
+    function boltPath(x0, y0, x1, y1, segs, amp) {
+      const path = [];
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const off = (i % 2 === 0 ? amp : -amp) * (i === 0 || i === segs ? 0 : 1);
+        path.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t + off]);
+      }
+      return path;
+    }
+    const bw = tw + padX * 2;
+    ctx.beginPath();
+    const top = boltPath(-padX, boxY, bw - padX, boxY, 7, 3);
+    const bot = boltPath(bw - padX, boxY + boxH, -padX, boxY + boxH, 7, 3);
+    [...top, ...bot].forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+    ctx.closePath();
+
+    // 배경
+    ctx.globalAlpha = a * 0.8;
+    ctx.fillStyle = "rgba(8,8,14,1)";
+    ctx.fill();
+    // 번개색 외곽선 (등장 순간 흰색 번쩍 → 스킬 색)
     ctx.globalAlpha = a;
-    ctx.fillStyle = b.color;
-    ctx.fillText(b.text, bx, by);
+    ctx.lineWidth = flashing ? 3.5 : 2;
+    ctx.strokeStyle = flashing ? "#ffffff" : b.color;
+    ctx.shadowColor = b.color;
+    ctx.shadowBlur = flashing ? 18 : 10;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // 글자 (등장 번쩍임 땐 흰색, 이후 스킬 색 + 흰 하이라이트)
+    ctx.globalAlpha = a;
+    ctx.fillStyle = flashing ? "#ffffff" : b.color;
+    ctx.fillText(b.text, 0, 0);
+    if (!flashing) {
+      ctx.globalAlpha = a * 0.5;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(b.text, -0.5, -0.5);
+    }
+    ctx.restore();
     ctx.globalAlpha = 1;
   }
 
