@@ -732,11 +732,11 @@ const COMPANION_DEFS = [
       const R = 7;   // 공 반지름
       // 공 개수 보충 (영입/여분의 공 직후): 발밑에 정지 상태로 생성
       while (comp.balls.length < comp.ballCount) {
-        // 두 번째 공(banked)은 항상 옆 벽을 맞춰 적을 노리는 뱅크샷 전용
+        // 2번째 공부터(인덱스 1+)는 항상 옆 벽을 맞춰 적을 노리는 뱅크샷 전용
         comp.balls.push({
           x: comp.x, y: CONFIG.barricadeY - R - 1, vx: 0, vy: 0,
           rest: true, restAt: ++comp.restSeq,
-          banked: comp.balls.length === 1,
+          banked: comp.balls.length >= 1,
         });
       }
       // ★ 쫓아갈 공 선택:
@@ -858,7 +858,7 @@ const COMPANION_DEFS = [
     upgrades: [
       { name: "축구부: 강슛 훈련",  desc: "축구공 속도 +177 (3렙 맥스 시 저격탄의 70%)", maxLv: 3, apply: c => c.ballSpeed += 177 },
       { name: "축구부: 정조준 킥",  desc: "축구공 피해 +40%",                            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
-      { name: "축구부: 여분의 공",  desc: "축구공 +1개 (최대 2개, 뱅크샷 전용)",          maxLv: 1, apply: c => c.ballCount = 2 },
+      { name: "축구부: 여분의 공",  desc: "축구공 +1개 (2번째부터 뱅크샷 전용)",          maxLv: 1, apply: c => c.ballCount += 1 },
     ],
     // 카드 우선순위: 공 속도 1렙까진 속도만, 이후 셋 다 동일 확률
     cardFilter: c => c.upLv[0] < 1 ? [0] : [0, 1, 2],
