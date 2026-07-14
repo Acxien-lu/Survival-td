@@ -257,11 +257,12 @@
     <button class="fac-close" id="club-close">닫기</button>
   </div>
 
-  <!-- 사감 (체육 선생님) 패널: 동료 강화 공격 해금 -->
+  <!-- 사감 (체육 선생님) 패널: 동료 강화 공격 해금 + 지참 카드 -->
   <div id="warden-panel">
     <h3>🏫 체육 선생님</h3>
     <div class="hint" id="warden-hint"></div>
     <button class="fac-action" id="warden-hire" style="width:min(300px,84vw)">사감으로 고용 — 300킬</button>
+    <div class="lodge-section" id="carry-list" style="max-height:52vh; overflow-y:auto; width:min(320px,88vw)"></div>
     <button class="fac-close" id="warden-close">닫기</button>
   </div>
 
@@ -451,7 +452,7 @@ const COMPANION_DEFS = [
           const kind = Math.random() < 0.5 ? "adrenaline" : "dopamine";
           game.medBuff = { kind, t: 4 };
           const def = COMPANION_DEFS.find(d => d.id === "medic");
-          game.effects.push({ type: "ki", x: comp.x, y: CONFIG.playerY, color: def.color, life: 0.5 });
+          game.effects.push({ type: "medki", x: comp.x, y: CONFIG.playerY, color: def.color, life: 0.5 });
           game.skillBanner = {
             text: kind === "adrenaline" ? "아드레날린!" : "도파민!",
             color: "#5b9e7d", life: 1.4, plain: true,
@@ -1289,7 +1290,7 @@ function update(dt) {
       const spd = 175 * dt;   // 기공사 이동(350)의 절반
       if (dist <= spd) { dr.x = dr.tx; dr.y = dr.ty; dr.landed = true; dr.holdT = 0; }
       else { dr.x += (dx / dist) * spd; dr.y += (dy / dist) * spd; }
-      // 비행 중 공격
+      // 비행 중 공격 (총알 착탄 효과)
       dr.atkCd -= dt;
       if (dr.atkCd <= 0 && game.zombies.length > 0) {
         let t = null, bd = Infinity;
@@ -1299,15 +1300,33 @@ function update(dt) {
         }
         if (t) {
           t.hp -= dr.dmg;
-          game.effects.push({ type: "impact", x: t.x, y: t.y, life: 0.12 });
+          // 드론 → 타겟으로 짧은 사격 라인 + 착탄 섬광
+          game.effects.push({ type: "droneshot", x0: dr.x, y0: dr.y, x1: t.x, y1: t.y, life: 0.1 });
+          game.effects.push({ type: "impact", x: t.x, y: t.y, life: 0.14 });
+          spawnParticles(t.x, t.y, "#ffd47a", 3);
           if (t.hp <= 0) killZombie(game.zombies.indexOf(t));
         }
         dr.atkCd = 0.3;
       }
     } else {
-      // 착지 후 잠깐 머물다 폭발
+      // 착지 후 잠깐 머물며 계속 공격하다 폭발
       dr.holdT += dt;
-      if (dr.holdT > 0.4) {
+      dr.atkCd -= dt;
+      if (dr.atkCd <= 0 && game.zombies.length > 0) {
+        let t2 = null, bd2 = Infinity;
+        for (const z of game.zombies) {
+          const zd = (z.x - dr.x) ** 2 + (z.y - dr.y) ** 2;
+          if (zd < bd2) { bd2 = zd; t2 = z; }
+        }
+        if (t2) {
+          t2.hp -= dr.dmg;
+          game.effects.push({ type: "droneshot", x0: dr.x, y0: dr.y, x1: t2.x, y1: t2.y, life: 0.1 });
+          game.effects.push({ type: "impact", x: t2.x, y: t2.y, life: 0.14 });
+          if (t2.hp <= 0) killZombie(game.zombies.indexOf(t2));
+        }
+        dr.atkCd = 0.3;
+      }
+      if (dr.holdT > 0.8) {
         explode(dr.x, dr.y, W / 4, dr.dmg * 2, false);
         game.drones.splice(i, 1);
       }
@@ -1511,9 +1530,10 @@ function buildCardPool() {
       const allowed = def.cardFilter ? def.cardFilter(deployed) : def.upgrades.map((_, i) => i);
       def.upgrades.forEach((up, i) => {
         if (!allowed.includes(i)) return;
-        if (deployed.upLv[i] >= up.maxLv) return;   // 맥스 도달 카드는 제외
+        const bonus = deployed.carryCard === i ? 1 : 0;   // 지참 카드는 맥스 +1
+        if (deployed.upLv[i] >= up.maxLv + bonus) return;   // 맥스 도달 카드는 제외
         others.push({
-          tag: `${def.name} 강화 (${deployed.upLv[i]}/${up.maxLv})`, cls: "ally",
+          tag: `${def.name} 강화 (${deployed.upLv[i]}/${up.maxLv + bonus})`, cls: "ally",
           name: up.name, desc: up.desc,
           apply: () => { up.apply(deployed); deployed.upLv[i]++; deployed.level++; },
         });
@@ -1523,6 +1543,24 @@ function buildCardPool() {
   // ★ 주인공 카드는 웨이브에서 등장 금지 — 강당의 개인 훈련소에서만 영구 강화
   return { recruits, others };
 }
+
+// 지참 카드 적용: 전투 시작 시 지정 카드를 1레벨 적용된 채로 시작
+// 의무병은 '따라하기' — copyTarget(동료 id)이 지참한 카드를 대상에게 한 번 더 적용
+function applyCarryCard(comp) {
+  if (comp.def.id === "medic" && comp.copyTarget) {
+    const src = allOwned().find(c => c.def.id === comp.copyTarget);
+    if (!src || src.carryCard == null) return;
+    const up = src.def.upgrades[src.carryCard];
+    if (up) { up.apply(src); src.upLv[src.carryCard]++; }
+    return;
+  }
+  const idx = comp.carryCard;
+  if (idx == null) return;
+  const up = comp.def.upgrades[idx];
+  if (up) { up.apply(comp); comp.upLv[idx]++; }
+}
+
+function carryUnlocked() { return game.wave >= 20; }
 
 function recruitCompanion(def) {
   const comp = { def, level: 1, upLv: def.upgrades.map(() => 0), x: W / 2, ...def.initState() };
@@ -1592,11 +1630,15 @@ function enterCamp() {
   game.state = "camp";
   game.barricadeHp = CONFIG.barricadeMaxHp;   // 도착하며 기본 정비
   resetHeroStats();                            // 주인공은 훈련소 영구 강화만 유지
-  // ★ 동료들도 전투 강화 전부 초기화 (영입/출전 상태는 유지)
+  // ★ 동료들도 전투 강화 전부 초기화 (영입/출전/지참 카드 상태는 유지)
+  //   지참 카드는 출정(departCamp) 시점에 적용되므로 여기선 초기화만.
   for (const comp of allOwned()) {
+    const carry = comp.carryCard, copyT = comp.copyTarget;
     Object.assign(comp, comp.def.initState());
     comp.upLv = comp.def.upgrades.map(() => 0);
     comp.level = 1;
+    comp.carryCard = carry;
+    comp.copyTarget = copyT;
   }
   game.bullets = []; game.cars = []; game.particles = []; game.effects = [];
   game.drones = [];
@@ -1628,6 +1670,17 @@ function campTap(x, y) {
 }
 
 function departCamp() {
+  // 지참 카드/따라하기를 출정 시점에 적용 (캠프에서 방금 고른 선택 반영)
+  for (const comp of allOwned()) {
+    const carry = comp.carryCard, copyT = comp.copyTarget;
+    Object.assign(comp, comp.def.initState());
+    comp.upLv = comp.def.upgrades.map(() => 0);
+    comp.level = 1;
+    comp.carryCard = carry;
+    comp.copyTarget = copyT;
+  }
+  for (const comp of allOwned()) if (comp.def.id !== "medic") applyCarryCard(comp);
+  for (const comp of allOwned()) if (comp.def.id === "medic") applyCarryCard(comp);
   game.state = "battle";
   startWave(game.wave + 1);
   game.running = true;
@@ -1696,6 +1749,60 @@ function refreshWarden() {
     wardenHint.innerHTML = `무서운 체육 선생님을 <b>사감</b>으로 고용하면,<br>동료들이 일정 공격마다 <b style="color:#e06a5c">강화 공격</b>을 터뜨립니다.<br>(고용 시부터 강화 공격 사용 가능)`;
     wardenHire.textContent = "사감으로 고용 — 300킬";
     wardenHire.disabled = game.killCount < 300;
+  }
+  refreshCarry();
+}
+
+// 지참 카드: 20웨이브 후, 출전 동료가 카드 1장을 소지한 채 전투 투입 (맥스 +1)
+function refreshCarry() {
+  const list = document.getElementById("carry-list");
+  list.innerHTML = "";
+  if (!carryUnlocked()) {
+    list.innerHTML = `<div class="club-locked">🔒 <b style="color:#d9a441">20웨이브 클리어 후</b> — 출전 동료가 강화 카드를<br>1장 소지한 채 전투에 투입할 수 있습니다 (맥스 +1).</div>`;
+    return;
+  }
+  const head = document.createElement("div");
+  head.className = "hint";
+  head.style.cssText = "margin:6px 0";
+  head.innerHTML = `📇 <b>지참 카드</b> — 출전 동료마다 1장 선택 (전투 시작부터 적용, 맥스 +1)`;
+  list.appendChild(head);
+
+  for (const comp of game.companions) {
+    const def = comp.def;
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "border:1px solid #3a3630; border-radius:8px; padding:8px; margin-bottom:8px";
+    const title = document.createElement("div");
+    title.className = "tname";
+    title.style.color = def.color;
+    title.textContent = def.name;
+    wrap.appendChild(title);
+
+    if (def.id === "medic") {
+      // 의무병: '따라하기' — 다른 출전 동료를 골라 그 동료의 지참 카드를 복제
+      const sub = document.createElement("div");
+      sub.className = "tdesc";
+      sub.textContent = "따라하기 — 동료를 선택하면 그 동료의 지참 카드를 한 번 더 적용";
+      wrap.appendChild(sub);
+      const others = game.companions.filter(c => c.def.id !== "medic");
+      for (const oc of others) {
+        const btn = document.createElement("button");
+        btn.className = "train-buy" + (comp.copyTarget === oc.def.id ? " equipped" : "");
+        btn.style.cssText = "display:block; width:100%; margin-top:4px";
+        btn.textContent = (comp.copyTarget === oc.def.id ? "✓ " : "") + oc.def.name + " 따라하기";
+        btn.onclick = () => { comp.copyTarget = comp.copyTarget === oc.def.id ? null : oc.def.id; refreshCarry(); };
+        wrap.appendChild(btn);
+      }
+    } else {
+      def.upgrades.forEach((up, i) => {
+        const btn = document.createElement("button");
+        btn.className = "train-buy" + (comp.carryCard === i ? " equipped" : "");
+        btn.style.cssText = "display:block; width:100%; margin-top:4px";
+        btn.textContent = (comp.carryCard === i ? "✓ " : "") + up.name.split(": ").pop();
+        btn.onclick = () => { comp.carryCard = comp.carryCard === i ? null : i; refreshCarry(); };
+        wrap.appendChild(btn);
+      });
+    }
+    list.appendChild(wrap);
   }
 }
 wardenHire.onclick = () => {
@@ -2266,7 +2373,19 @@ function draw() {
 
   // 이펙트 (체인 번개 / 폭발 / 스윙)
   for (const e of game.effects) {
-    if (e.type === "ki") {
+    if (e.type === "medki") {
+      // 의무병 버프 기: 몸 주변 오라 + 캐릭터 키(약 48px)만큼만 위로
+      const t = 1 - e.life / 0.5;
+      const a = Math.sin((1 - t) * Math.PI / 2);
+      const topY = e.y - 48 * Math.min(1, t * 2);
+      ctx.globalAlpha = a * 0.4;
+      ctx.fillStyle = e.color;
+      ctx.fillRect(e.x - 16, topY, 32, e.y - topY + 8);
+      ctx.globalAlpha = a * 0.85;
+      ctx.fillStyle = "#c8f0dd";
+      ctx.fillRect(e.x - 4, topY, 8, e.y - topY + 8);
+      ctx.globalAlpha = 1;
+    } else if (e.type === "ki") {
       // 기(차크라) 기둥: 동료에게서 하늘로 솟구치는 빛
       const t = 1 - e.life / 0.5;
       const a = Math.sin((1 - t) * Math.PI / 2);   // 빠르게 솟고 서서히 소멸
@@ -2339,6 +2458,12 @@ function draw() {
         ctx.lineTo(e.x + Math.cos(ang) * e.r * t, e.y + Math.sin(ang) * e.r * t);
         ctx.stroke();
       }
+    } else if (e.type === "droneshot") {
+      // 드론 사격 라인
+      const a = Math.max(0, e.life / 0.1);
+      ctx.strokeStyle = `rgba(255,210,120,${a})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); ctx.stroke();
     } else if (e.type === "impact") {
       // 착탄 섬광 (드론/특수공 등장)
       const a = Math.max(0, e.life / 0.15);
