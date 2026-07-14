@@ -750,6 +750,7 @@ function resetGame() {
     overload: null,      // 과부하 방전 진행 상태
     homerunT: 0,         // 투런 홈런 버프 남은 시간 (야구부 3배)
     soccerRushT: 0,      // 역전승 버프 남은 시간 (축구부)
+    skillBanner: null,   // 특수 스킬 발동 배너 { text, color, life }
   };
   resetHeroStats();
 }
@@ -903,8 +904,17 @@ function update(dt) {
     game.skillCd -= dt;
     if (game.skillCd <= 0) {
       const sk = SPECIAL_SKILLS.find(s => s.id === game.equippedSkill);
-      if (sk && sk.run()) game.skillCd = sk.cd;
+      if (sk && sk.run()) {
+        game.skillCd = sk.cd;
+        // 발동 배너: 바리케이드 왼쪽 위에 잠깐 표시
+        const def = COMPANION_DEFS.find(d => d.name === sk.owner);
+        game.skillBanner = { text: `${sk.name}!`, color: def ? def.color : "#e8e3d8", life: 1.4 };
+      }
     }
+  }
+  if (game.skillBanner) {
+    game.skillBanner.life -= dt;
+    if (game.skillBanner.life <= 0) game.skillBanner = null;
   }
 
   // --- 지속형 특수 스킬 처리 ---
@@ -2002,6 +2012,27 @@ function draw() {
     ctx.strokeStyle = "rgba(180,255,215,0.9)";      // 파동 선단
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(0, wy); ctx.lineTo(W, wy); ctx.stroke();
+  }
+
+  // 특수 스킬 발동 배너: 바리케이드 왼쪽 살짝 위, 스르륵 나타났다 사라짐
+  if (game.skillBanner) {
+    const b = game.skillBanner;
+    const total = 1.4;
+    const tIn = Math.min(1, (total - b.life) / 0.18);   // 등장 (0.18초)
+    const tOut = Math.min(1, b.life / 0.4);             // 소멸 (마지막 0.4초)
+    const a = Math.min(tIn, tOut);
+    const bx = 14 - (1 - tIn) * 30;                     // 왼쪽에서 슬라이드 인
+    const by = CONFIG.barricadeY - 28;
+    ctx.font = "bold 17px sans-serif";
+    ctx.textAlign = "left";
+    const tw = ctx.measureText(b.text).width;
+    ctx.globalAlpha = a * 0.65;
+    ctx.fillStyle = "rgba(10,10,14,1)";
+    ctx.beginPath(); ctx.roundRect(bx - 6, by - 17, tw + 16, 24, 6); ctx.fill();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = b.color;
+    ctx.fillText(b.text, bx, by);
+    ctx.globalAlpha = 1;
   }
 
   if (game.hitFlash > 0) {
