@@ -279,7 +279,7 @@ const ASSET_URLS = {
   bike: "assets/bike.png",
   truck: "assets/truck.png",
   bus: "assets/bus.png",
-  campBg: "assets/camp_bg.png",        // 강당 내부 (캠프 화면)
+  campBg: "assets/camp_bg.png?v=2",    // 강당 내부 (캠프 화면)
 };
 const IMAGES = {};
 function preloadAssets(callback) {
@@ -1300,8 +1300,8 @@ function showCardChoices() {
    시설을 탭하면 패널이 열립니다. 하단의 [출정] 탭으로 재출발.
    ================================================================ */
 const CAMP_ZONES = {
-  hall:   { x: 296,        y: 36,  w: 112, h: 80 },    // 2층 방송실 부스
-  medic:  { x: 28,         y: 122, w: 364, h: 92 },    // 무대 위 임시 양호실
+  hall:   { x: W / 2 - 56, y: 32,  w: 112, h: 72 },    // 2층 중앙 방송실 부스
+  medic:  { x: 28,         y: 142, w: 364, h: 86 },    // 무대 위 임시 양호실
   club:   { x: 16,         y: 296, w: 118, h: 110 },   // 코트 왼쪽 중간 (게임 동아리)
   train:  { x: 12,         y: 540, w: 126, h: 112 },   // 1층 구석 방 (개인 훈련소)
   lodge:  { x: 286,        y: 424, w: 124, h: 146 },   // 코트 한쪽 침낭 (임시 기숙사)
