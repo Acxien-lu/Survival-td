@@ -354,6 +354,11 @@ function distToSeg(px, py, x0, y0, x1, y1) {
   return Math.hypot(px - cx, py - cy);
 }
 
+// 의무병 버프 헬퍼 — game 전역 상태를 읽어 배율 반환
+function adrenMul() { return game.medBuff && game.medBuff.kind === "adrenaline" ? 1.5 : 1; }  // 공속
+function dopaMul()  { return game.medBuff && game.medBuff.kind === "dopamine" ? 1.5 : 1; }     // 범위
+function dopaOn()   { return game.medBuff && game.medBuff.kind === "dopamine"; }               // 탄 넓이 2배 등
+
 // 이동형 동료(기공사·야구부) 공용: 방어선에 가장 가까운 적의 x로 이동
 function moveToNearestX(comp, dt, speed) {
   let near = null;
@@ -384,6 +389,7 @@ const COMPANION_DEFS = [
         hitsLeft: comp.pierce,
         damage: dmg,
         sniper: true,
+        wide: dopaOn() ? 2 : 1,
       };
       // 사감 강화: 메인 사격(확인 사살 제외)만 카운트, 4번째마다 탄에 번개 부여
       if (game.warden && isMain) {
@@ -406,7 +412,7 @@ const COMPANION_DEFS = [
       comp.cooldown -= dt;
       if (comp.cooldown > 0 || game.zombies.length === 0) return;
       this.fire(comp, true);
-      comp.cooldown = 2.0;   // ★ 2초 고정
+      comp.cooldown = 2.0 / adrenMul();   // ★ 2초 고정 (아드레날린 시 단축)
       if (comp.doubleTap) { comp.tapQueue = 1; comp.tapTimer = 0.3; }
     },
     upgrades: [
@@ -420,28 +426,40 @@ const COMPANION_DEFS = [
   },
   {
     id: "medic", name: "의무병", color: "#5b9e7d",
-    recruitDesc: "5초마다 바리케이드 6 회복",
-    initState: () => ({ cooldown: 5, healAmt: 6, interval: 5, pulseCd: 0 }),
+    recruitDesc: "접착 물약 투척 — 착지점에 감속 지역 생성 (2초마다)",
+    initState: () => ({ cooldown: 1, throwCount: 0, pulseCd: 0 }),
     update(comp, dt) {
       if (comp.pulseCd > 0) comp.pulseCd -= dt;
       comp.cooldown -= dt;
-      if (comp.cooldown > 0) return;
-      if (game.barricadeHp < CONFIG.barricadeMaxHp) {
-        game.barricadeHp = Math.min(CONFIG.barricadeMaxHp, game.barricadeHp + comp.healAmt);
-        spawnParticles(comp.x, CONFIG.barricadeY, "#5b9e7d", 5);
-        // ★ 패시브: 수리가 실제로 발생하면 (20초 쿨) 바리케이드에서 위로
-        //   충격파를 발산해 적들을 화면 절반 지점까지 밀어냄
-        if (comp.pulseCd <= 0) {
-          game.pushWave = { y: CONFIG.barricadeY };
-          comp.pulseCd = 20;
+      if (comp.cooldown > 0 || game.zombies.length === 0) return;
+      // 맨 앞(방어선 최근접)의 적을 향해 포물선 투척 — 느려서 흘리기 쉬움
+      let target = null;
+      for (const z of game.zombies) if (!target || z.y > target.y) target = z;
+      const flightT = 1.1;   // 착탄까지 시간 (느림)
+      game.gluePots.push({
+        x: comp.x, y: CONFIG.playerY - 14,
+        tx: target.x, ty: target.y,
+        sx: comp.x, sy: CONFIG.playerY - 14,
+        t: 0, flightT,
+      });
+      comp.cooldown = 2.0;
+      // 사감 강화: 4번째 투척마다 아드레날린/도파민 중 랜덤 1개 4초 발동
+      if (game.warden) {
+        comp.throwCount++;
+        if (comp.throwCount % 4 === 0) {
+          const kind = Math.random() < 0.5 ? "adrenaline" : "dopamine";
+          game.medBuff = { kind, t: 4 };
+          const def = COMPANION_DEFS.find(d => d.id === "medic");
+          game.effects.push({ type: "ki", x: comp.x, y: CONFIG.playerY, color: def.color, life: 0.5 });
+          game.skillBanner = {
+            text: kind === "adrenaline" ? "아드레날린!" : "도파민!",
+            color: "#5b9e7d", life: 1.4,
+          };
         }
       }
-      comp.cooldown = comp.interval;
     },
-    upgrades: [
-      { name: "의무병: 붕대 보급", desc: "회복량 +6",               maxLv: 5, apply: c => c.healAmt += 6 },
-      { name: "의무병: 신속 처치", desc: "회복 간격 -1초 (최소 2초)", maxLv: 3, apply: c => c.interval = Math.max(2, c.interval - 1) },
-    ],
+    upgrades: [],   // 의무병은 강화 카드 없음
+    cardFilter: () => [],
   },
   {
     id: "driver", name: "드라이버", color: "#c9884a",
@@ -453,7 +471,7 @@ const COMPANION_DEFS = [
       if (comp.cooldown <= 0) {
         comp.launchQueue = comp.fleet;
         comp.launchTimer = 0;
-        comp.cooldown = comp.interval;
+        comp.cooldown = comp.interval / adrenMul();
       }
       // 대기열의 차량을 0.35초 간격으로 한 대씩, 서로 다른 타겟을 향해 발진
       if (comp.launchQueue > 0) {
@@ -499,8 +517,8 @@ const COMPANION_DEFS = [
     update(comp, dt) {
       comp.cooldown -= dt;
       if (comp.cooldown > 0 || game.zombies.length === 0) return;
-      // 폭발 범위: 기본 W/6, 렙업마다 커져서 3렙(맥스)에 W/4
-      const radius = W / 6 + (W / 4 - W / 6) * (comp.radiusLv / 3);
+      // 폭발 범위: 기본 W/6, 렙업마다 커져서 3렙(맥스)에 W/4 (도파민 시 1.5배)
+      const radius = (W / 6 + (W / 4 - W / 6) * (comp.radiusLv / 3)) * dopaMul();
       // 사감 강화: 4번째 공격마다 랜덤 적에게 대형 폭탄(가로 2/3 원형)
       comp.atkCount++;
       if (game.warden && comp.atkCount % 4 === 0) {
@@ -511,7 +529,7 @@ const COMPANION_DEFS = [
           vx: Math.cos(a2) * 516, vy: Math.sin(a2) * 516,
           hitsLeft: 1, damage: comp.dmg, bomb: true, radius: (W * 2 / 3) / 2, bigbomb: true,
         });
-        comp.cooldown = 2.5;
+        comp.cooldown = 2.5 / adrenMul();
         return;
       }
       let target = null;
@@ -523,7 +541,7 @@ const COMPANION_DEFS = [
         hitsLeft: 1, damage: comp.dmg,
         bomb: true, radius,
       });
-      comp.cooldown = 2.5;
+      comp.cooldown = 2.5 / adrenMul();
     },
     upgrades: [
       { name: "폭탄병: 확장 폭약", desc: "폭발 범위 확대 (3렙 맥스)", maxLv: 3, apply: c => c.radiusLv += 1 },
@@ -571,6 +589,21 @@ const COMPANION_DEFS = [
         z.hp -= comp.dmg;
         spawnParticles(z.x, z.y, "#5aa8c9", 3);
       }
+      // 도파민: 반대 방향으로 체인이 하나 더 뻗음 (기공 공격 2회 사용 시 종료)
+      if (dopaOn() && hits.length > 0) {
+        const used = hits.slice();   // 이미 맞은 적 제외
+        let cur2 = target, next2 = null, bestD2 = (W / 4) * (W / 4);
+        for (const z of game.zombies) {
+          if (used.includes(z)) continue;
+          const ddx = z.x - cur2.x, ddy = z.y - cur2.y, dd2 = ddx * ddx + ddy * ddy;
+          if (dd2 < bestD2) { bestD2 = dd2; next2 = z; }
+        }
+        if (next2) {
+          next2.hp -= comp.dmg;
+          spawnParticles(next2.x, next2.y, "#5aa8c9", 3);
+          game.effects.push({ type: "chain", pts: [{ x: target.x, y: target.y }, { x: next2.x, y: next2.y }], life: 0.2 });
+        }
+      }
       // 사감 강화: 8번째 공격마다 기공파 발사 — 체인 마지막 적을 향해 날아가 폭발
       comp.atkCount++;
       if (game.warden && comp.atkCount % 8 === 0) {
@@ -589,7 +622,7 @@ const COMPANION_DEFS = [
       for (let j = game.zombies.length - 1; j >= 0; j--) {
         if (game.zombies[j].hp <= 0) killZombie(j);
       }
-      comp.cooldown = 0.35;
+      comp.cooldown = 0.35 / adrenMul();
     },
     upgrades: [
       { name: "기공사: 전격 체인", desc: "체인 +2 (추가로 적 2명에게 튕김, 3렙 맥스)", maxLv: 3, apply: c => c.chains += 2 },
@@ -607,8 +640,8 @@ const COMPANION_DEFS = [
       moveToNearestX(comp, dt, buffed ? 594 * 3 : 594);
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
-      // 원형 스윙 범위: 기본 H*0.18, 카드마다 x1.28 — 화면 절반(H*0.5) 한도
-      let r = Math.min(H * 0.5, H * 0.18 * Math.pow(1.28, comp.rangeLv));
+      // 원형 스윙 범위: 기본 H*0.18, 카드마다 x1.28 — 화면 절반(H*0.5) 한도 (도파민 1.5배)
+      let r = Math.min(H * 0.5, H * 0.18 * Math.pow(1.28, comp.rangeLv) * dopaMul());
       if (buffed) r = Math.min(H * 0.5, r * 1.3);
       const r2 = r * r;
       const inner2 = (r * 0.5) * (r * 0.5);   // 중심 50% 안쪽 = 2배 데미지
@@ -639,7 +672,7 @@ const COMPANION_DEFS = [
       }
       if (swung) {
         game.effects.push({ type: "swing", x: cx0, y: cy0, hw: r, vh: r, life: 0.22 });
-        comp.cooldown = buffed ? 0.7 / 3 : 0.7;
+        comp.cooldown = (buffed ? 0.7 / 3 : 0.7) / adrenMul();
         // ★ 스윙 범위 안에 축구공이 있으면: 그 방향으로 야구공을 장외로 날림!
         //   속도 = 축구공 속도 x2, 피해 = 축구공 피해 x2, 벽 반사 없이 관통 직진.
         //   축구공 자체에는 아무 영향 없음.
@@ -705,7 +738,7 @@ const COMPANION_DEFS = [
       if (chase) {
         const dx = chase.x - comp.x;
         // 역전승 버프: 이동속도 +30%
-        const step = (game.soccerRushT > 0 ? 210 * 1.3 : 210) * dt;
+        const step = (game.soccerRushT > 0 ? 210 * 1.3 : 210) * adrenMul() * dt;
         if (Math.abs(dx) > step) comp.x += Math.sign(dx) * step;
         else comp.x = chase.x;
         comp.x = Math.max(40, Math.min(W - 40, comp.x));
@@ -771,7 +804,8 @@ const COMPANION_DEFS = [
           const z = game.zombies[j];
           if (z.ballCd > 0) continue;
           const dx = ball.x - z.x, dy = ball.y - z.y;
-          if (dx * dx + dy * dy < (z.size + R) * (z.size + R)) {
+          const hR = (z.size + R) * (dopaOn() ? 2 : 1);
+          if (dx * dx + dy * dy < hR * hR) {
             z.hp -= comp.dmg;
             z.ballCd = 0.35;
             spawnParticles(z.x, z.y, "#e8e8ee", 3);
@@ -860,6 +894,9 @@ function resetGame() {
     cars: [],
     carSeq: 0,
     drones: [],          // 드라이버 강화: 드론
+    gluePots: [],        // 의무병 접착 물약 (비행 중)
+    glueZones: [],       // 의무병 접착 지역 (착지 후)
+    medBuff: null,       // 아드레날린/도파민 버프 { kind, t }
     companions: [],      // 출전 중 (최대 4)
     reserve: [],         // 숙소 대기
     spawnQueue: 0,
@@ -1024,7 +1061,8 @@ function update(dt) {
     let target = null;
     for (const z of game.zombies) if (!target || z.y > target.y) target = z;
     fireAt(target);
-    game.fireCooldown = CONFIG.baseFireInterval / Math.max(0.3, stats.fireRateMul);
+    const adren = game.medBuff && game.medBuff.kind === "adrenaline" ? 1.5 : 1;
+    game.fireCooldown = CONFIG.baseFireInterval / (Math.max(0.3, stats.fireRateMul) * adren);
   }
 
   // 동료 행동 (출전 중인 4명만)
@@ -1151,7 +1189,8 @@ function update(dt) {
     for (let j = game.zombies.length - 1; j >= 0; j--) {
       const z = game.zombies[j];
       const dx = b.x - z.x, dy = b.y - z.y;
-      if (dx * dx + dy * dy < (z.size + 5) * (z.size + 5)) {
+      const hitR = z.size + 5 * (b.wide || 1);
+      if (dx * dx + dy * dy < hitR * hitR) {
         if (b.kiwave) {
           // 기공파: 착탄 지점에 원형 폭발 + 넉백
           game.effects.push({ type: "boltburst", x: b.x, y: b.y, r: b.radius, life: 0.3 });
@@ -1262,7 +1301,34 @@ function update(dt) {
     }
   }
 
-  // 의무병 충격파: 바리케이드에서 화면 절반(H*0.5)까지 위로 전진하며
+  // 의무병 접착 물약: 포물선 비행 → 착지 시 접착 지역 생성
+  for (let i = game.gluePots.length - 1; i >= 0; i--) {
+    const p = game.gluePots[i];
+    p.t += dt;
+    const r = Math.min(1, p.t / p.flightT);
+    p.x = p.sx + (p.tx - p.sx) * r;
+    p.y = p.sy + (p.ty - p.sy) * r - Math.sin(r * Math.PI) * 90;   // 포물선 아치
+    if (r >= 1) {
+      game.glueZones.push({ x: p.tx, y: p.ty, r: Math.sqrt(W * H / 4) / 2, t: 3 });
+      game.gluePots.splice(i, 1);
+    }
+  }
+  // 접착 지역: 3초 유지, 내부 적 이동 감속(50%)
+  for (let i = game.glueZones.length - 1; i >= 0; i--) {
+    const gz = game.glueZones[i];
+    gz.t -= dt;
+    if (gz.t <= 0) { game.glueZones.splice(i, 1); continue; }
+    const gr2 = gz.r * gz.r;
+    for (const z of game.zombies) {
+      const dx = z.x - gz.x, dy = z.y - gz.y;
+      if (dx * dx + dy * dy < gr2) z.glued = 0.1;   // 다음 이동에서 감속 적용
+    }
+  }
+  // 의무병 버프(아드레날린/도파민) 타이머
+  if (game.medBuff) {
+    game.medBuff.t -= dt;
+    if (game.medBuff.t <= 0) game.medBuff = null;
+  }
   // 파동보다 아래에 있는 적을 파면 위로 쓸어올림
   if (game.pushWave) {
     const waveSpeed = (CONFIG.barricadeY - H * 0.5) / 0.45;   // 약 0.45초에 도달
@@ -1278,8 +1344,10 @@ function update(dt) {
     const z = game.zombies[i];
     z.wobble += dt * 7;
     if (z.ballCd > 0) z.ballCd -= dt;
+    const glueMul = z.glued > 0 ? 0.5 : 1;   // 접착 지역: 이동 절반
+    if (z.glued > 0) z.glued -= dt;
     if (z.y < CONFIG.barricadeY - z.size - 8) {
-      z.y += z.speed * dt;
+      z.y += z.speed * glueMul * dt;
     } else {
       z.attackTimer -= dt;
       if (z.attackTimer <= 0) {
@@ -1519,6 +1587,7 @@ function enterCamp() {
   }
   game.bullets = []; game.cars = []; game.particles = []; game.effects = [];
   game.drones = [];
+  game.gluePots = []; game.glueZones = []; game.medBuff = null;
   game.pushWave = null;
   game.laserT = 0; game.laserBeam = null;
   game.bikerGang = null; game.carpet = null; game.overload = null;
@@ -2065,6 +2134,23 @@ function draw() {
 
   // 좀비
   for (const z of game.zombies) drawZombie(z);
+
+  // 의무병 접착 지역 (노란 끈적 지역)
+  for (const gz of game.glueZones) {
+    const a = Math.min(1, gz.t) * 0.5;
+    ctx.fillStyle = `rgba(230,210,70,${a * 0.4})`;
+    ctx.beginPath(); ctx.arc(gz.x, gz.y, gz.r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(240,225,90,${a})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(gz.x, gz.y, gz.r, 0, Math.PI * 2); ctx.stroke();
+  }
+  // 접착 물약 (비행 중)
+  for (const p of game.gluePots) {
+    ctx.fillStyle = "#c9b840";
+    ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#e8d860";
+    ctx.beginPath(); ctx.arc(p.x - 1.5, p.y - 1.5, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
 
   // 드론 (드라이버 강화)
   for (const dr of game.drones) {
