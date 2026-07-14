@@ -955,9 +955,9 @@ function assignSlots() {
    [5] 웨이브 — 챕터별 난이도 재시작 (11웨이브=5단계, 21웨이브=10단계)
    ================================================================ */
 function diffOf(n) {
-  // 난이도 = 웨이브 번호 (1~30 직선 상승).
-  // 훈련소/공업 영구 성장이 생겨 챕터별 하향(11→5, 21→10)은 제거.
-  return n;
+  // 40웨이브까지는 웨이브 번호 그대로, 이후는 초과분을 1.6배로 가중해 더 가파르게.
+  if (n <= 40) return n;
+  return 40 + (n - 40) * 1.6;
 }
 
 function startWave(n) {
@@ -969,22 +969,24 @@ function startWave(n) {
 
 function spawnZombie() {
   const d = diffOf(game.wave);
-  const big = d >= 4 && Math.random() < Math.min(0.22, 0.05 + d * 0.005);
+  // 60웨이브 이후: 낮은 확률로 보스 좀비 등장 (큰 좀비 HP x10, 작은 좀비 속도)
+  const boss = game.wave > 60 && Math.random() < 0.04;
+  const big = !boss && d >= 4 && Math.random() < Math.min(0.22, 0.05 + d * 0.005);
   const hpBase = Math.max(4, Math.round((14 + d * 3 + d * d * 0.15) / 3));
-  // 몰려오는 방향: 학교 정문(왼쪽) 또는 본관(오른쪽) 두 갈래
+  const smallSpeed = Math.min(90, 38 + d * 0.5 + Math.random() * 10);
   const lane = Math.random() < 0.5 ? W * 0.25 : W * 0.75;
   const x = Math.max(45, Math.min(W - 45, lane + (Math.random() - 0.5) * W * 0.4));
+  const hp = boss ? hpBase * 30 : (big ? hpBase * 3 : hpBase);   // 보스 = 큰좀비(x3)의 x10
   game.zombies.push({
     x,
     y: -30 - Math.random() * 40,
-    hp:    big ? hpBase * 3 : hpBase,
-    maxHp: big ? hpBase * 3 : hpBase,
-    speed: Math.min(90, (big ? 24 : 38) + d * 0.5 + Math.random() * 10),   // 속도 원복
-    size:  big ? 30 : 17,
-    big,
+    hp, maxHp: hp,
+    speed: boss ? smallSpeed : Math.min(90, (big ? 24 : 38) + d * 0.5 + Math.random() * 10),
+    size:  boss ? 46 : (big ? 30 : 17),
+    big, boss,
     attackTimer: 0,
     lastCarId: 0,
-    ballCd: 0,       // 축구공 피격 쿨다운
+    ballCd: 0,
     wobble: Math.random() * Math.PI * 2,
   });
 }
@@ -1393,7 +1395,7 @@ function update(dt) {
     } else {
       z.attackTimer -= dt;
       if (z.attackTimer <= 0) {
-        game.barricadeHp -= z.big ? 4 : 1;   // 물량전이라 개별 피해 하향
+        game.barricadeHp -= z.boss ? 12 : (z.big ? 4 : 1);   // 보스는 강타
         game.hitFlash = 0.2;
         z.attackTimer = 1.0;
         if (stats.thorns > 0) {
@@ -2410,17 +2412,36 @@ function draw() {
       ctx.fillRect(e.x - 4, topY, 8, e.y - topY + 8);
       ctx.globalAlpha = 1;
     } else if (e.type === "ki") {
-      // 기(차크라) 기둥: 동료에게서 하늘로 솟구치는 빛
+      // 특수 스킬 발동: 불타오르는 폭발 (활활 펑~!)
       const t = 1 - e.life / 0.5;
-      const a = Math.sin((1 - t) * Math.PI / 2);   // 빠르게 솟고 서서히 소멸
-      const topY = e.y * (1 - Math.min(1, t * 2.5));  // 0.2초 만에 화면 끝까지
-      ctx.globalAlpha = a * 0.35;
-      ctx.fillStyle = e.color;
-      ctx.fillRect(e.x - 14, topY, 28, e.y - topY);   // 넓은 오라
-      ctx.globalAlpha = a * 0.9;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(e.x - 3, topY, 6, e.y - topY);     // 밝은 심지
-      ctx.globalAlpha = 1;
+      const a = Math.max(0, 1 - t);
+      // 치솟는 불기둥 (여러 갈래 화염)
+      const baseR = 26;
+      for (let f = 0; f < 7; f++) {
+        const fx = e.x + (f - 3) * 7 + Math.sin(performance.now() / 60 + f) * 3;
+        const flameH = (60 + Math.random() * 50) * (0.5 + t);
+        const grad = ctx.createLinearGradient(fx, e.y, fx, e.y - flameH);
+        grad.addColorStop(0, `rgba(255,240,150,${a})`);
+        grad.addColorStop(0.5, `rgba(255,140,40,${a * 0.9})`);
+        grad.addColorStop(1, `rgba(200,40,20,0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(fx - 7, e.y);
+        ctx.quadraticCurveTo(fx - 4, e.y - flameH * 0.6, fx, e.y - flameH);
+        ctx.quadraticCurveTo(fx + 4, e.y - flameH * 0.6, fx + 7, e.y);
+        ctx.closePath(); ctx.fill();
+      }
+      // 바닥 폭발 링
+      ctx.strokeStyle = `rgba(255,170,60,${a})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(e.x, e.y, baseR + t * 40, 0, Math.PI * 2); ctx.stroke();
+      // 튀는 불똥
+      ctx.fillStyle = `rgba(255,200,80,${a})`;
+      for (let s = 0; s < 6; s++) {
+        const ang = (s / 6) * Math.PI * 2;
+        const rr = t * 55;
+        ctx.beginPath(); ctx.arc(e.x + Math.cos(ang) * rr, e.y - Math.abs(Math.sin(ang)) * rr, 3, 0, Math.PI * 2); ctx.fill();
+      }
     } else if (e.type === "chain") {
       // 전기(번개) 이펙트: 3중 스트로크 (넓은 글로우 → 중간 → 흰 심지)
       const a = Math.min(1, e.life * 6.5);
@@ -2701,14 +2722,34 @@ function drawCompanion(comp) {
     (comp.def.id === "batter" && game.homerunT > 0) ||
     (comp.def.id === "soccer" && game.soccerRushT > 0);
   if (buffActive) {
-    const pulse = 0.55 + Math.sin(performance.now() / 90) * 0.25;
-    ctx.globalAlpha = pulse * 0.55;
-    ctx.fillStyle = comp.def.color;
-    ctx.beginPath(); ctx.ellipse(x, y - 6, 22, 28, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = pulse * 0.85;
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.ellipse(x, y - 6, 22, 28, 0, 0, Math.PI * 2); ctx.stroke();
+    // 타오르는 불꽃 오라 (활활활) — 동료를 감싸는 여러 갈래 화염
+    const now = performance.now();
+    const flames = 9;
+    for (let f = 0; f < flames; f++) {
+      const ang = (f / flames) * Math.PI * 2;
+      const wobble = Math.sin(now / 80 + f * 1.3);
+      const fh = 20 + wobble * 8 + Math.random() * 4;    // 불꽃 높이
+      const fx = x + Math.cos(ang) * 16;
+      const fy = y - 4 + Math.sin(ang) * 20;
+      const grad = ctx.createLinearGradient(fx, fy, fx, fy - fh);
+      grad.addColorStop(0, "rgba(255,220,120,0.85)");
+      grad.addColorStop(0.5, "rgba(255,120,30,0.7)");
+      grad.addColorStop(1, "rgba(200,40,20,0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(fx - 5, fy);
+      ctx.quadraticCurveTo(fx - 3, fy - fh * 0.6, fx, fy - fh);
+      ctx.quadraticCurveTo(fx + 3, fy - fh * 0.6, fx + 5, fy);
+      ctx.closePath(); ctx.fill();
+    }
+    // 중심 발광 코어
+    const pulse = 0.5 + Math.sin(now / 90) * 0.2;
+    ctx.globalAlpha = pulse;
+    const core = ctx.createRadialGradient(x, y - 4, 2, x, y - 4, 24);
+    core.addColorStop(0, "rgba(255,230,150,0.6)");
+    core.addColorStop(1, "rgba(255,120,30,0)");
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(x, y - 4, 24, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
   }
   const img = IMAGES[comp.def.id];
@@ -2727,25 +2768,30 @@ function drawCompanion(comp) {
 }
 
 function drawZombie(z) {
-  const img = z.big ? IMAGES.zombieBig : IMAGES.zombie;
+  const img = (z.big || z.boss) ? IMAGES.zombieBig : IMAGES.zombie;
+  if (z.boss) {
+    // 보스: 붉은 위협 오라 + 확대 스프라이트
+    ctx.fillStyle = `rgba(180,40,30,${0.25 + Math.sin(performance.now() / 200) * 0.1})`;
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.size * 1.3, 0, Math.PI * 2); ctx.fill();
+  }
   if (img) {
     const s = z.size * 2.4;
     ctx.drawImage(img, z.x - s / 2, z.y - s / 2, s, s);
   } else {
     const sway = Math.sin(z.wobble) * 2;
-    ctx.fillStyle = z.big ? "#4c6b33" : "#5b7d3c";
+    ctx.fillStyle = z.boss ? "#7a2c22" : (z.big ? "#4c6b33" : "#5b7d3c");
     ctx.beginPath(); ctx.arc(z.x + sway, z.y, z.size, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#c33b2e";
-    ctx.fillRect(z.x + sway - 5, z.y + z.size * 0.2, 4, 4);
-    ctx.fillRect(z.x + sway + 2, z.y + z.size * 0.2, 4, 4);
+    ctx.fillStyle = "#ff3b2e";
+    ctx.fillRect(z.x + sway - 6, z.y + z.size * 0.2, 5, 5);
+    ctx.fillRect(z.x + sway + 2, z.y + z.size * 0.2, 5, 5);
   }
-  // 물량전에선 체력바를 대형 좀비/다친 적에게만, 얇게
-  if (z.hp < z.maxHp) {
+  // 체력바: 보스/대형/다친 적에게
+  if (z.hp < z.maxHp || z.boss) {
     const w = z.size * 2;
     ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillRect(z.x - w / 2, z.y - z.size - 9, w, 4);
-    ctx.fillStyle = "#c33b2e";
-    ctx.fillRect(z.x - w / 2, z.y - z.size - 9, w * (z.hp / z.maxHp), 4);
+    ctx.fillRect(z.x - w / 2, z.y - z.size - 9, w, z.boss ? 6 : 4);
+    ctx.fillStyle = z.boss ? "#ff7a3a" : "#c33b2e";
+    ctx.fillRect(z.x - w / 2, z.y - z.size - 9, w * (z.hp / z.maxHp), z.boss ? 6 : 4);
   }
 }
 
