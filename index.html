@@ -186,6 +186,17 @@
   #club-panel .hint { color: #8a8577; font-size: 12px; margin-bottom: 4px; padding: 0 30px; text-align: center; line-height: 1.6; }
   .club-locked { color: #b0a890; font-size: 13px; line-height: 1.8; text-align: center; padding: 10px 6px; }
   .train-buy.equipped { background: #c33b2e; border-color: #e06a5c; }
+
+  /* ---- 사감 ---- */
+  #warden-panel {
+    position: absolute; inset: 0;
+    background: rgba(5,6,8,0.85);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    gap: 12px; z-index: 25;
+  }
+  #warden-panel h3 { color: #e8d9b8; font-size: 19px; }
+  #warden-panel .hint { color: #b0a890; font-size: 13px; padding: 0 30px; text-align: center; line-height: 1.7; }
 </style>
 </head>
 <body>
@@ -244,6 +255,14 @@
     <div class="hint" id="club-hint"></div>
     <div class="lodge-section" id="club-list" style="max-height:56vh; overflow-y:auto;"></div>
     <button class="fac-close" id="club-close">닫기</button>
+  </div>
+
+  <!-- 사감 (체육 선생님) 패널: 동료 강화 공격 해금 -->
+  <div id="warden-panel">
+    <h3>🏫 체육 선생님</h3>
+    <div class="hint" id="warden-hint"></div>
+    <button class="fac-action" id="warden-hire" style="width:min(300px,84vw)">사감으로 고용 — 500킬</button>
+    <button class="fac-close" id="warden-close">닫기</button>
   </div>
 
   <div id="center-overlay">
@@ -351,33 +370,42 @@ const COMPANION_DEFS = [
   {
     id: "sniper", name: "저격수", color: "#8e6fae",
     recruitDesc: "가장 체력 높은 적 저격 (2초, 기본 3관통)",
-    initState: () => ({ cooldown: 0, dmgMul: 1, pierce: 3, doubleTap: false, tapQueue: 0, tapTimer: 0 }),
-    fire(comp) {
+    initState: () => ({ cooldown: 0, dmgMul: 1, pierce: 3, doubleTap: false, tapQueue: 0, tapTimer: 0, atkCount: 0 }),
+    fire(comp, isMain) {
       // 한 발 발사: 최대 체력 적 조준
       if (game.zombies.length === 0) return;
       let target = game.zombies[0];
       for (const z of game.zombies) if (z.hp > target.hp) target = z;
       const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
-      game.bullets.push({
+      const dmg = 30 * comp.dmgMul;
+      const bullet = {
         x: comp.x, y: CONFIG.playerY - 14,
         vx: Math.cos(a) * 1560, vy: Math.sin(a) * 1560,
         hitsLeft: comp.pierce,
-        damage: 30 * comp.dmgMul,
+        damage: dmg,
         sniper: true,
-      });
+      };
+      // 사감 강화: 메인 사격(확인 사살 제외)만 카운트, 4번째마다 탄에 번개 부여
+      if (game.warden && isMain) {
+        comp.atkCount++;
+        if (comp.atkCount % 4 === 0) {
+          bullet.sniperBolt = dmg;   // 탄 근처에 탄과 동일 피해의 번개 폭발
+        }
+      }
+      game.bullets.push(bullet);
     },
     update(comp, dt) {
-      // 확인 사살: 첫 발 후 0.3초 뒤 두 번째 탄
+      // 확인 사살: 첫 발 후 0.3초 뒤 두 번째 탄 (카운트 제외 = isMain false)
       if (comp.tapQueue > 0) {
         comp.tapTimer -= dt;
         if (comp.tapTimer <= 0) {
-          this.fire(comp);
+          this.fire(comp, false);
           comp.tapQueue--;
         }
       }
       comp.cooldown -= dt;
       if (comp.cooldown > 0 || game.zombies.length === 0) return;
-      this.fire(comp);
+      this.fire(comp, true);
       comp.cooldown = 2.0;   // ★ 2초 고정
       if (comp.doubleTap) { comp.tapQueue = 1; comp.tapTimer = 0.3; }
     },
@@ -418,7 +446,7 @@ const COMPANION_DEFS = [
   {
     id: "driver", name: "드라이버", color: "#c9884a",
     recruitDesc: "10초마다 차량 출격, 경로의 적 격파 (증편 가능)",
-    initState: () => ({ cooldown: 4, dmg: 32, interval: 10, fleet: 1, launchQueue: 0, launchTimer: 0 }),
+    initState: () => ({ cooldown: 4, dmg: 32, interval: 10, fleet: 1, launchQueue: 0, launchTimer: 0, carCount: 0 }),
     update(comp, dt) {
       comp.cooldown -= dt;
       // 쿨이 돌면 보유 차량 수만큼 출격 대기열에 올림
@@ -431,10 +459,8 @@ const COMPANION_DEFS = [
       if (comp.launchQueue > 0) {
         comp.launchTimer -= dt;
         if (comp.launchTimer <= 0 && game.zombies.length > 0) {
-          // (보유차량-대기열)번째로 방어선에 가까운 적을 타겟으로 → 차마다 다른 적
           const sorted = [...game.zombies].sort((a, b) => b.y - a.y);
           const idx = Math.min(comp.fleet - comp.launchQueue, sorted.length - 1);
-          // 형태는 랜덤 (승용차/오토바이/트럭/버스), 충돌 판정은 모두 동일
           const kinds = ["sedan", "bike", "truck", "bus"];
           game.cars.push({
             x: sorted[idx].x, y: CONFIG.barricadeY - 20, speed: 420, dmg: comp.dmg,
@@ -443,6 +469,18 @@ const COMPANION_DEFS = [
           });
           comp.launchQueue--;
           comp.launchTimer = 0.35;
+          // 사감 강화: 차량 5대 출발마다 드론 발진 (증편 차량 모두 누적, 여러 대 공존 가능)
+          if (game.warden) {
+            comp.carCount++;
+            if (comp.carCount % 5 === 0) {
+              const tx = W * 0.3 + Math.random() * W * 0.4;   // 맵 중앙 근처 랜덤
+              const ty = H * 0.32 + Math.random() * H * 0.2;
+              game.drones.push({
+                x: comp.x, y: CONFIG.barricadeY - 20,
+                tx, ty, dmg: comp.dmg, atkCd: 0, landed: false,
+              });
+            }
+          }
         }
       }
     },
@@ -457,18 +495,31 @@ const COMPANION_DEFS = [
   {
     id: "bomber", name: "폭탄병", color: "#b5533c",
     recruitDesc: "폭탄 투척 — 첫 명중 지점에 범위 피해 (2.5초)",
-    initState: () => ({ cooldown: 1, dmg: 18, radiusLv: 0 }),
+    initState: () => ({ cooldown: 1, dmg: 18, radiusLv: 0, atkCount: 0 }),
     update(comp, dt) {
       comp.cooldown -= dt;
       if (comp.cooldown > 0 || game.zombies.length === 0) return;
+      // 폭발 범위: 기본 W/6, 렙업마다 커져서 3렙(맥스)에 W/4
+      const radius = W / 6 + (W / 4 - W / 6) * (comp.radiusLv / 3);
+      // 사감 강화: 4번째 공격마다 랜덤 적에게 대형 폭탄(가로 2/3 원형)
+      comp.atkCount++;
+      if (game.warden && comp.atkCount % 4 === 0) {
+        const rz = game.zombies[Math.floor(Math.random() * game.zombies.length)];
+        const a2 = Math.atan2(rz.y - CONFIG.playerY, rz.x - comp.x);
+        game.bullets.push({
+          x: comp.x, y: CONFIG.playerY - 14,
+          vx: Math.cos(a2) * 516, vy: Math.sin(a2) * 516,
+          hitsLeft: 1, damage: comp.dmg, bomb: true, radius: (W * 2 / 3) / 2, bigbomb: true,
+        });
+        comp.cooldown = 2.5;
+        return;
+      }
       let target = null;
       for (const z of game.zombies) if (!target || z.y > target.y) target = z;
       const a = Math.atan2(target.y - CONFIG.playerY, target.x - comp.x);
-      // 폭발 범위: 기본 W/6, 렙업마다 커져서 3렙(맥스)에 W/4
-      const radius = W / 6 + (W / 4 - W / 6) * (comp.radiusLv / 3);
       game.bullets.push({
         x: comp.x, y: CONFIG.playerY - 14,
-        vx: Math.cos(a) * 516, vy: Math.sin(a) * 516,   // 430의 +20%
+        vx: Math.cos(a) * 516, vy: Math.sin(a) * 516,
         hitsLeft: 1, damage: comp.dmg,
         bomb: true, radius,
       });
@@ -485,7 +536,7 @@ const COMPANION_DEFS = [
     id: "engineer", name: "기공사", color: "#5aa8c9",
     recruitDesc: "좌우로 뛰며 전방 직선 사격 (사거리: 화면 세로 절반)",
     mover: true,
-    initState: () => ({ cooldown: 0, dmg: 8, chains: 2 }),
+    initState: () => ({ cooldown: 0, dmg: 8, chains: 2, atkCount: 0 }),
     update(comp, dt) {
       // 이동: 방어선에 가장 가까운 적의 x 위치로 (437의 -20% = 350)
       moveToNearestX(comp, dt, 350);
@@ -520,6 +571,20 @@ const COMPANION_DEFS = [
         z.hp -= comp.dmg;
         spawnParticles(z.x, z.y, "#5aa8c9", 3);
       }
+      // 사감 강화: 8번째 공격마다 기공파 발사 — 체인 마지막 적을 향해 날아가 폭발
+      comp.atkCount++;
+      if (game.warden && comp.atkCount % 8 === 0) {
+        const last = hits[hits.length - 1];
+        const a = Math.atan2(last.y - CONFIG.playerY, last.x - comp.x);
+        game.bullets.push({
+          x: comp.x, y: CONFIG.playerY - 14,
+          vx: Math.cos(a) * 620, vy: Math.sin(a) * 620,
+          hitsLeft: 1, kiwave: true,
+          dmg: comp.dmg * 2,          // 체인 피해의 2배
+          radius: Math.sqrt(W * H / 4) / 2,  // 화면 1/4 면적의 원
+          knock: 8,
+        });
+      }
       // 죽은 적 정리 (뒤에서부터)
       for (let j = game.zombies.length - 1; j >= 0; j--) {
         if (game.zombies[j].hp <= 0) killZombie(j);
@@ -535,20 +600,22 @@ const COMPANION_DEFS = [
     id: "batter", name: "야구부", color: "#d4c05a",
     recruitDesc: "좌우로 뛰며 범위 내 적을 강타 — 방어선에 가까운 적일수록 아픔",
     mover: true,
-    initState: () => ({ cooldown: 0, dmg: 22, rangeLv: 0 }),
+    initState: () => ({ cooldown: 0, dmg: 22, rangeLv: 0, atkCount: 0 }),
     update(comp, dt) {
       // 투런 홈런 버프: 모든 능력치 3배, 범위는 +30%만 (화면 절반 한도)
       const buffed = game.homerunT > 0;
       moveToNearestX(comp, dt, buffed ? 594 * 3 : 594);
       comp.cooldown -= dt;
       if (comp.cooldown > 0) return;
-      // 원형 스윙 범위: 기본 반지름 = 화면 세로의 21% (기존 대비 -30%),
-      // 범위 카드마다 x1.465 — 3렙 맥스에서 기존 3렙(488px)과 동일한 성능
-      let r = H * 0.21 * Math.pow(1.465, comp.rangeLv);
+      // 원형 스윙 범위: 기본 H*0.18, 카드마다 x1.28 — 화면 절반(H*0.5) 한도
+      let r = Math.min(H * 0.5, H * 0.18 * Math.pow(1.28, comp.rangeLv));
       if (buffed) r = Math.min(H * 0.5, r * 1.3);
       const r2 = r * r;
       const inner2 = (r * 0.5) * (r * 0.5);   // 중심 50% 안쪽 = 2배 데미지
       const cx0 = comp.x, cy0 = CONFIG.playerY;
+      // 사감 강화: 4번째 스윙에 맞은 적은 맵 절반 위로 날아감
+      comp.atkCount++;
+      const megaKnock = game.warden && comp.atkCount % 4 === 0;
       let swung = false;
       for (let j = game.zombies.length - 1; j >= 0; j--) {
         const z = game.zombies[j];
@@ -557,11 +624,14 @@ const COMPANION_DEFS = [
         if (d2 < r2) {
           const mult = d2 < inner2 ? 2 : 1;
           z.hp -= comp.dmg * mult * (buffed ? 3 : 1);
-          // 기본 넉백 5 (버프 시 3배): 야구부에서 멀어지는 방향으로 밀림
           const dist = Math.sqrt(d2) || 1;
-          const kb = buffed ? 15 : 5;
-          z.x += (dx / dist) * kb;
-          z.y += (dy / dist) * kb;
+          if (megaKnock) {
+            z.y = Math.max(-20, z.y - H * 0.5);   // 맵 절반 넉백
+          } else {
+            const kb = buffed ? 15 : 5;
+            z.x += (dx / dist) * kb;
+            z.y += (dy / dist) * kb;
+          }
           spawnParticles(z.x, z.y, "#d4c05a", 4);
           if (z.hp <= 0) killZombie(j);
           swung = true;
@@ -597,7 +667,7 @@ const COMPANION_DEFS = [
       }
     },
     upgrades: [
-      { name: "야구부: 긴 배트", desc: "스윙 범위 +46.5% (3렙 맥스)", maxLv: 3, apply: c => c.rangeLv += 1 },
+      { name: "야구부: 긴 배트", desc: "스윙 범위 +28% (3렙 맥스, 화면 절반 한도)", maxLv: 3, apply: c => c.rangeLv += 1 },
       { name: "야구부: 강타",   desc: "타격 피해 +40%",            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
     ],
   },
@@ -605,7 +675,7 @@ const COMPANION_DEFS = [
     id: "soccer", name: "축구부", color: "#d24038",
     recruitDesc: "축구공을 차서 벽에 튕기는 랠리 공격 — 공은 바리케이드에서 멈춤",
     mover: true,
-    initState: () => ({ dmg: 16, ballSpeed: 560, ballCount: 1, balls: [], restSeq: 0 }),
+    initState: () => ({ dmg: 16, ballSpeed: 560, ballCount: 1, balls: [], restSeq: 0, kickCount: 0 }),
     update(comp, dt) {
       const R = 7;   // 공 반지름
       // 공 개수 보충 (영입/여분의 공 직후): 발밑에 정지 상태로 생성
@@ -656,23 +726,45 @@ const COMPANION_DEFS = [
             ball.vx = Math.cos(a) * comp.ballSpeed;
             ball.vy = Math.sin(a) * comp.ballSpeed;
             ball.rest = false;
+            // 사감 강화: 8번째 킥마다 추가 인원이 특수 공을 참
+            if (game.warden && !ball.special) {
+              comp.kickCount++;
+              if (comp.kickCount % 8 === 0) this.launchSpecialBall(comp);
+            }
           }
           continue;
         }
         ball.x += ball.vx * dt;
         ball.y += ball.vy * dt;
-        // 알카노이드식 벽 반사: 좌/우/위
-        if (ball.x < R)     { ball.x = R;     ball.vx = Math.abs(ball.vx); }
-        if (ball.x > W - R) { ball.x = W - R; ball.vx = -Math.abs(ball.vx); }
-        if (ball.y < R)     { ball.y = R;     ball.vy = Math.abs(ball.vy); }
-        // 바리케이드에 닿으면 딱 정지
-        // ★ 모서리 교착 방지: 축구부 발이 닿는 범위(x 42~378)로 공이 살짝 굴러 나옴
-        if (ball.vy > 0 && ball.y >= CONFIG.barricadeY - R) {
-          ball.y = CONFIG.barricadeY - R;
-          ball.vx = 0; ball.vy = 0;
-          ball.x = Math.max(42, Math.min(W - 42, ball.x));
-          ball.rest = true;
-          ball.restAt = ++comp.restSeq;   // 도착 순번 기록 (2개 공 우선순위용)
+        if (ball.special) {
+          // 특수 공: 모든 벽(좌/우/위/바리케이드)에 반사, 8회 후 장외
+          //   단 8회째가 바리케이드면 한 번 더 튕김
+          let bounced = false, hitBarricade = false;
+          if (ball.x < R)     { ball.x = R;     ball.vx = Math.abs(ball.vx);  bounced = true; }
+          if (ball.x > W - R) { ball.x = W - R; ball.vx = -Math.abs(ball.vx); bounced = true; }
+          if (ball.y < R)     { ball.y = R;     ball.vy = Math.abs(ball.vy);  bounced = true; }
+          if (ball.vy > 0 && ball.y >= CONFIG.barricadeY - R) {
+            ball.y = CONFIG.barricadeY - R; ball.vy = -Math.abs(ball.vy);
+            bounced = true; hitBarricade = true;
+          }
+          if (bounced) {
+            ball.bounces++;
+            spawnParticles(ball.x, ball.y, "#ffd24a", 3);
+            // 8회 이후: 바리케이드 튕김이면 1회 유예, 아니면 소멸
+            if (ball.bounces >= 8 && !(ball.bounces === 8 && hitBarricade)) ball.dead = true;
+          }
+        } else {
+          // 일반 공: 좌/우/위 반사 + 바리케이드에서 정지
+          if (ball.x < R)     { ball.x = R;     ball.vx = Math.abs(ball.vx); }
+          if (ball.x > W - R) { ball.x = W - R; ball.vx = -Math.abs(ball.vx); }
+          if (ball.y < R)     { ball.y = R;     ball.vy = Math.abs(ball.vy); }
+          if (ball.vy > 0 && ball.y >= CONFIG.barricadeY - R) {
+            ball.y = CONFIG.barricadeY - R;
+            ball.vx = 0; ball.vy = 0;
+            ball.x = Math.max(42, Math.min(W - 42, ball.x));
+            ball.rest = true;
+            ball.restAt = ++comp.restSeq;
+          }
         }
         // 경로상의 적 타격 (좀비별 짧은 쿨다운으로 중복 타격 방지)
         for (let j = game.zombies.length - 1; j >= 0; j--) {
@@ -687,6 +779,27 @@ const COMPANION_DEFS = [
           }
         }
       }
+      // 장외된 특수 공 제거
+      comp.balls = comp.balls.filter(b => !b.dead);
+    },
+    // 사감 강화: 추가 인원이 특수 공을 참 — 옆 벽을 먼저 맞히고
+    //   8번째로 가까운 적(부족하면 맨 뒤 적)을 노림. 8회 튕긴 뒤 장외.
+    launchSpecialBall(comp) {
+      if (game.zombies.length === 0) return;
+      const R = 7;
+      const sorted = [...game.zombies].sort((a, b) => b.y - a.y);  // 가까운 순
+      const target = sorted[Math.min(7, sorted.length - 1)];        // 8번째 (없으면 맨 뒤)
+      const fromLeft = comp.x < W / 2;
+      // 옆 벽 거울상 조준 → 벽 먼저 맞고 타겟으로
+      const aimX = fromLeft ? -target.x : 2 * W - target.x;
+      const bx = fromLeft ? R + 2 : W - R - 2;   // 강당 옆쪽에서 등장
+      const a = Math.atan2(target.y - (CONFIG.barricadeY - 40), aimX - bx);
+      comp.balls.push({
+        x: bx, y: CONFIG.barricadeY - 40,
+        vx: Math.cos(a) * comp.ballSpeed, vy: Math.sin(a) * comp.ballSpeed,
+        rest: false, special: true, bounces: 0, restAt: ++comp.restSeq,
+      });
+      game.effects.push({ type: "impact", x: bx, y: CONFIG.barricadeY - 40, life: 0.15 });
     },
     upgrades: [
       { name: "축구부: 강슛 훈련",  desc: "축구공 속도 +177 (3렙 맥스 시 저격탄의 70%)", maxLv: 3, apply: c => c.ballSpeed += 177 },
@@ -746,6 +859,7 @@ function resetGame() {
     zombies: [],
     cars: [],
     carSeq: 0,
+    drones: [],          // 드라이버 강화: 드론
     companions: [],      // 출전 중 (최대 4)
     reserve: [],         // 숙소 대기
     spawnQueue: 0,
@@ -759,6 +873,7 @@ function resetGame() {
     ghostCd: 6 + Math.random() * 12,
     equippedSkill: null, // 게임 동아리 특수 스킬 (id, 하나만 장착)
     skillCd: 0,
+    warden: false,       // 사감 고용 여부 (동료 강화 공격 활성화)
     laserT: 0,           // 레이저 남은 시간
     laserBeam: null,     // 레이저 빔 좌표 (그리기용)
     bikerGang: null,     // 폭주족 출격 대기열
@@ -1037,7 +1152,24 @@ function update(dt) {
       const z = game.zombies[j];
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx * dx + dy * dy < (z.size + 5) * (z.size + 5)) {
-        if (b.bomb) {
+        if (b.kiwave) {
+          // 기공파: 착탄 지점에 원형 폭발 + 넉백
+          game.effects.push({ type: "boltburst", x: b.x, y: b.y, r: b.radius, life: 0.3 });
+          const kr2 = b.radius * b.radius;
+          for (let k = game.zombies.length - 1; k >= 0; k--) {
+            const zz = game.zombies[k];
+            const kdx = zz.x - b.x, kdy = zz.y - b.y, kd2 = kdx * kdx + kdy * kdy;
+            if (kd2 < kr2) {
+              zz.hp -= b.dmg;
+              const kd = Math.sqrt(kd2) || 1;
+              zz.x += (kdx / kd) * b.knock;
+              zz.y += (kdy / kd) * b.knock;
+              if (zz.hp <= 0) killZombie(k);
+            }
+          }
+          game.bullets.splice(i, 1);
+          break;
+        } else if (b.bomb) {
           explode(b.x, b.y, b.radius, b.damage, true);   // 폭탄 폭발 → 범위 내 차량 유폭 가능
           game.bullets.splice(i, 1);
           break;
@@ -1054,6 +1186,22 @@ function update(dt) {
           z.hp -= b.damage !== undefined ? b.damage : CONFIG.baseDamage * stats.damageMul * (1 + 0.2 * game.campAtk);
           z.y -= stats.knockback;
           spawnParticles(z.x, z.y, "#c33b2e", 2);
+          // 저격수 강화: 명중 지점에 번개 폭발 (탄 피해와 동일, 소형 범위)
+          if (b.sniperBolt) {
+            const br = 46;   // 번개 범위
+            game.effects.push({ type: "boltburst", x: b.x, y: b.y, r: br, life: 0.22 });
+            const br2 = br * br;
+            for (let k = game.zombies.length - 1; k >= 0; k--) {
+              const zz = game.zombies[k];
+              if (zz === z) continue;
+              const ddx = zz.x - b.x, ddy = zz.y - b.y;
+              if (ddx * ddx + ddy * ddy < br2) {
+                zz.hp -= b.sniperBolt;
+                if (zz.hp <= 0) killZombie(k);
+              }
+            }
+            b.sniperBolt = 0;   // 1회만
+          }
           if (--b.hitsLeft <= 0) game.bullets.splice(i, 1);
           if (z.hp <= 0) killZombie(j);
           break;
@@ -1078,6 +1226,40 @@ function update(dt) {
       }
     }
     if (car.y < -60) game.cars.splice(i, 1);
+  }
+
+  // 드론 (드라이버 강화): 목표 지점까지 비행하며 0.3초마다 최근접 적 직접 타격, 착지 시 폭발
+  for (let i = game.drones.length - 1; i >= 0; i--) {
+    const dr = game.drones[i];
+    if (!dr.landed) {
+      const dx = dr.tx - dr.x, dy = dr.ty - dr.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const spd = 175 * dt;   // 기공사 이동(350)의 절반
+      if (dist <= spd) { dr.x = dr.tx; dr.y = dr.ty; dr.landed = true; dr.holdT = 0; }
+      else { dr.x += (dx / dist) * spd; dr.y += (dy / dist) * spd; }
+      // 비행 중 공격
+      dr.atkCd -= dt;
+      if (dr.atkCd <= 0 && game.zombies.length > 0) {
+        let t = null, bd = Infinity;
+        for (const z of game.zombies) {
+          const zd = (z.x - dr.x) ** 2 + (z.y - dr.y) ** 2;
+          if (zd < bd) { bd = zd; t = z; }
+        }
+        if (t) {
+          t.hp -= dr.dmg;
+          game.effects.push({ type: "impact", x: t.x, y: t.y, life: 0.12 });
+          if (t.hp <= 0) killZombie(game.zombies.indexOf(t));
+        }
+        dr.atkCd = 0.3;
+      }
+    } else {
+      // 착지 후 잠깐 머물다 폭발
+      dr.holdT += dt;
+      if (dr.holdT > 0.4) {
+        explode(dr.x, dr.y, W / 4, dr.dmg * 2, false);
+        game.drones.splice(i, 1);
+      }
+    }
   }
 
   // 의무병 충격파: 바리케이드에서 화면 절반(H*0.5)까지 위로 전진하며
@@ -1321,6 +1503,7 @@ const CAMP_ZONES = {
   club:   { x: 16,         y: 296, w: 118, h: 110 },   // 코트 왼쪽 중간 (게임 동아리)
   train:  { x: 12,         y: 540, w: 126, h: 112 },   // 1층 구석 방 (개인 훈련소)
   lodge:  { x: 286,        y: 424, w: 124, h: 146 },   // 코트 한쪽 침낭 (임시 기숙사)
+  warden: { x: 286,        y: 300, w: 124, h: 108 },   // 기숙사 옆 (사감/체육 선생님)
   depart: { x: W / 2 - 80, y: 660, w: 160, h: 52 },
 };
 
@@ -1335,6 +1518,7 @@ function enterCamp() {
     comp.level = 1;
   }
   game.bullets = []; game.cars = []; game.particles = []; game.effects = [];
+  game.drones = [];
   game.pushWave = null;
   game.laserT = 0; game.laserBeam = null;
   game.bikerGang = null; game.carpet = null; game.overload = null;
@@ -1355,6 +1539,7 @@ function campTap(x, y) {
   if (hit(CAMP_ZONES.hall))   { openFacility("hall"); return; }
   if (hit(CAMP_ZONES.medic))  { openFacility("medic"); return; }
   if (hit(CAMP_ZONES.club))   { openClub(); return; }
+  if (game.wave >= 10 && hit(CAMP_ZONES.warden)) { openWarden(); return; }
   if (hit(CAMP_ZONES.train))  { openTrain(); return; }
   if (hit(CAMP_ZONES.lodge))  { openLodge(); return; }
   if (hit(CAMP_ZONES.depart)) { departCamp(); return; }
@@ -1408,6 +1593,35 @@ function refreshFacility() {
     };
   }
 }
+
+/* ---- 사감 (체육 선생님): 500킬로 고용, 동료 강화 공격 활성화 ---- */
+const wardenPanel = document.getElementById("warden-panel");
+const wardenHint = document.getElementById("warden-hint");
+const wardenHire = document.getElementById("warden-hire");
+document.getElementById("warden-close").onclick = () => { wardenPanel.style.display = "none"; };
+wardenPanel.onclick = (e) => { if (e.target === wardenPanel) wardenPanel.style.display = "none"; };
+
+function openWarden() {
+  refreshWarden();
+  wardenPanel.style.display = "flex";
+}
+function refreshWarden() {
+  if (game.warden) {
+    wardenHint.innerHTML = `사감이 부대를 훈련시키고 있습니다.<br><b style="color:#8fd0a0">동료 강화 공격 활성화됨</b> — 각 동료가 일정 횟수마다 강화된 공격을 발동합니다.`;
+    wardenHire.textContent = "고용 완료";
+    wardenHire.disabled = true;
+  } else {
+    wardenHint.innerHTML = `무서운 체육 선생님을 <b>사감</b>으로 고용하면,<br>동료들이 일정 공격마다 <b style="color:#e06a5c">강화 공격</b>을 터뜨립니다.<br>(1회 고용 시 한 판 내내 유지)`;
+    wardenHire.textContent = "사감으로 고용 — 500킬";
+    wardenHire.disabled = game.killCount < 500;
+  }
+}
+wardenHire.onclick = () => {
+  if (game.warden || game.killCount < 500) return;
+  game.killCount -= 500;
+  game.warden = true;
+  refreshWarden();
+};
 
 /* ---- 게임 동아리: 특수 스킬 장착 (30웨이브 클리어 후 개방, 1개만) ----
    전투 중 자동 발동. run()이 false를 반환하면 (조건 미충족)
@@ -1688,6 +1902,27 @@ function drawCamp() {
   const lz = CAMP_ZONES.lodge;
   campLabel(`\uD83D\uDECF \uc784\uc2dc \uae30\uc219\uc0ac \u00b7 \ucd9c\uc804 ${game.companions.length}/4`, lz.x + lz.w / 2 - 14, lz.y - 10, "#6fa3d4");
 
+  // ---- 사감 (체육 선생님): 10웨이브 후 등장 ----
+  if (game.wave >= 10) {
+    const wz = CAMP_ZONES.warden;
+    // 호루라기 목걸이를 건 체육 선생님 실루엣
+    ctx.fillStyle = game.warden ? "#c33b2e" : "#4a5058";
+    ctx.fillRect(wz.x + 44, wz.y + 40, 34, 44);          // 트레이닝복 상의
+    ctx.fillStyle = "#e0b48c";
+    ctx.beginPath(); ctx.arc(wz.x + 61, wz.y + 30, 12, 0, Math.PI * 2); ctx.fill();  // 머리
+    ctx.fillStyle = "#2b2b2b";
+    ctx.fillRect(wz.x + 50, wz.y + 18, 22, 8);           // 모자챙
+    ctx.fillStyle = "#d9a441";
+    ctx.beginPath(); ctx.arc(wz.x + 52, wz.y + 54, 4, 0, Math.PI * 2); ctx.fill();   // 호루라기
+    ctx.strokeStyle = "#d9a441"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(wz.x + 61, wz.y + 40); ctx.lineTo(wz.x + 52, wz.y + 54); ctx.stroke();
+    campLabel(
+      game.warden ? "\uD83C\uDFEB \uc0ac\uac10 (\uace0\uc6a9\ub428)" : "\uD83C\uDFEB \uccb4\uc721 \uc120\uc0dd\ub2d8",
+      wz.x + wz.w / 2, wz.y + wz.h + 4,
+      game.warden ? "#e06a5c" : "#b0a890"
+    );
+  }
+
   // 합류 알림
   if (game.campNotice) {
     ctx.font = "bold 12px sans-serif";
@@ -1801,6 +2036,16 @@ function draw() {
   for (const comp of game.companions) {
     if (!comp.balls) continue;
     for (const ball of comp.balls) {
+      if (ball.special) {
+        // 특수 공: 금색 발광 축구공
+        ctx.fillStyle = "rgba(255,210,74,0.3)";
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, 11, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#ffd24a";
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#7a5810"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(ball.x, ball.y, 7, 0, Math.PI * 2); ctx.stroke();
+        continue;
+      }
       ctx.fillStyle = "#f0f0f4";
       ctx.beginPath(); ctx.arc(ball.x, ball.y, 7, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = "#24161c";
@@ -1820,6 +2065,28 @@ function draw() {
 
   // 좀비
   for (const z of game.zombies) drawZombie(z);
+
+  // 드론 (드라이버 강화)
+  for (const dr of game.drones) {
+    ctx.fillStyle = "#3a4048";
+    ctx.fillRect(dr.x - 8, dr.y - 4, 16, 8);         // 본체
+    ctx.fillStyle = "#c9884a";
+    ctx.fillRect(dr.x - 3, dr.y - 2, 6, 4);          // 코어
+    ctx.strokeStyle = "rgba(180,190,200,0.7)";       // 로터
+    ctx.lineWidth = 2;
+    const rot = performance.now() / 30;
+    for (const sx of [-11, 11]) {
+      ctx.beginPath();
+      ctx.moveTo(dr.x + sx - 6 * Math.cos(rot), dr.y - 6);
+      ctx.lineTo(dr.x + sx + 6 * Math.cos(rot), dr.y - 6);
+      ctx.stroke();
+    }
+    if (dr.landed) {   // 착지 후 경고 링
+      ctx.strokeStyle = `rgba(255,120,60,${0.4 + Math.sin(performance.now() / 60) * 0.3})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(dr.x, dr.y, W / 4, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
 
   // 차량 (형태만 다르고 판정은 동일)
   for (const car of game.cars) {
@@ -1957,6 +2224,27 @@ function draw() {
       ctx.strokeStyle = `rgba(255,200,120,${1 - t})`;          // 충격파 링
       ctx.lineWidth = 5;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r * t, 0, Math.PI * 2); ctx.stroke();
+    } else if (e.type === "boltburst") {
+      // 번개 폭발: 푸른 원형 방전 + 방사형 스파크
+      const t = 1 - e.life / (e.life > 0.25 ? 0.3 : 0.22);
+      const a = Math.max(0, 1 - t);
+      ctx.strokeStyle = `rgba(120,200,255,${a})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (0.4 + 0.6 * t), 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = `rgba(220,240,255,${a})`;
+      ctx.lineWidth = 1.5;
+      for (let s = 0; s < 6; s++) {
+        const ang = (s / 6) * Math.PI * 2 + t;
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(e.x + Math.cos(ang) * e.r * t, e.y + Math.sin(ang) * e.r * t);
+        ctx.stroke();
+      }
+    } else if (e.type === "impact") {
+      // 착탄 섬광 (드론/특수공 등장)
+      const a = Math.max(0, e.life / 0.15);
+      ctx.fillStyle = `rgba(255,240,200,${a})`;
+      ctx.beginPath(); ctx.arc(e.x, e.y, 8 * (1 - a) + 3, 0, Math.PI * 2); ctx.fill();
     } else if (e.type === "boom") {
       const t = 1 - e.life / 0.25;
       ctx.strokeStyle = `rgba(232,151,90,${1 - t})`;
