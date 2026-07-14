@@ -233,7 +233,7 @@
   <!-- 개인 훈련소 패널: 주인공 영구 강화 -->
   <div id="train-panel">
     <h3>🎯 개인 훈련소</h3>
-    <div class="hint">보유 킬: <span id="train-kills" style="color:#d9a441; font-weight:700">0</span> · 강화당 50킬 · <b style="color:#e06a5c">영구 유지</b> (캠프에서도 안 지워짐)</div>
+    <div class="hint">보유 킬: <span id="train-kills" style="color:#d9a441; font-weight:700">0</span> · 구매마다 가격 2배 · <b style="color:#e06a5c">영구 유지</b></div>
     <div class="lodge-section" id="train-list"></div>
     <button class="fac-close" id="train-close">닫기</button>
   </div>
@@ -683,16 +683,20 @@ const COMPANION_DEFS = [
 ];
 
 /* ================================================================
-   [3] 주인공 스킬 풀 — 더블 샷은 총 5발에서 맥스
+   [3] 주인공 스킬 풀 (개인 훈련소 전용)
+   ----------------------------------------------------------------
+   전부 "가산형(+n%)"이며, 구매할 때마다 가격이 2배가 됩니다.
+   (50 → 100 → 200 → 400...) — 지수 비용이 성장을 자연스럽게 제동.
+   trainMax: 최대 구매 횟수 (없으면 가격이 사실상의 제한)
    ================================================================ */
 const HERO_SKILLS = [
-  { name: "속사",       desc: "공격 속도 +35%",             apply: s => s.fireRateMul *= 1.35 },
-  { name: "고화력 탄환", desc: "공격력 +45%",                apply: s => s.damageMul *= 1.45 },
-  { name: "멀티 샷",     desc: "발사 탄환 +1 (최대 5발)",     apply: s => s.multishot += 1,
+  { name: "속사",       desc: "공격 속도 +10%",                       apply: s => s.fireRateMul += 0.10 },
+  { name: "고화력 탄환", desc: "공격력 +10%",                          apply: s => s.damageMul += 0.10 },
+  { name: "멀티 샷",     desc: "발사 탄환 +1 (최대 5발)",               apply: s => s.multishot += 1,
     available: s => s.multishot < CONFIG.maxMultishot },
-  { name: "관통탄",      desc: "탄환이 적 1명을 추가 관통",    apply: s => s.pierce += 1 },
-  { name: "넉백 강화",   desc: "명중 시 적을 밀어냄 +10",      apply: s => s.knockback += 10 },
-  { name: "대구경 개조", desc: "공격력 +80%, 공격 속도 -15%", apply: s => { s.damageMul *= 1.80; s.fireRateMul *= 0.85; } },
+  { name: "관통탄",      desc: "탄환이 적 1명을 추가 관통",              apply: s => s.pierce += 1 },
+  { name: "넉백 강화",   desc: "명중 시 적을 밀어냄 +5 (최대 50)",       apply: s => s.knockback += 5, trainMax: 10 },
+  { name: "대구경 개조", desc: "공격력 +20%, 공격 속도 -5% (5회 맥스)",  apply: s => { s.damageMul += 0.20; s.fireRateMul -= 0.05; }, trainMax: 5 },
 ];
 
 /* ================================================================
@@ -718,6 +722,7 @@ function resetGame() {
     wave: 0,
     campAtk: 0,
     permHero: baseHeroStats(),   // 훈련소 영구 강화 (한 판 내내 유지, 캠프에도 안 지워짐)
+    trainCounts: {},             // 훈련소 스킬별 구매 횟수 (가격 = 50 x 2^횟수)
     barricadeHp: CONFIG.barricadeMaxHp,
     playerX: W / 2,
     fireCooldown: 0,
@@ -887,7 +892,7 @@ function update(dt) {
     let target = null;
     for (const z of game.zombies) if (!target || z.y > target.y) target = z;
     fireAt(target);
-    game.fireCooldown = CONFIG.baseFireInterval / stats.fireRateMul;
+    game.fireCooldown = CONFIG.baseFireInterval / Math.max(0.3, stats.fireRateMul);
   }
 
   // 동료 행동 (출전 중인 4명만)
@@ -1534,18 +1539,22 @@ function refreshTrain() {
   trainKills.textContent = game.killCount;
   trainList.innerHTML = "";
   for (const sk of HERO_SKILLS) {
-    const maxed = sk.available && !sk.available(game.permHero);
+    const cnt = game.trainCounts[sk.name] || 0;
+    const cost = 50 * Math.pow(2, cnt);   // 구매마다 2배: 50→100→200→400...
+    const maxed = (sk.trainMax && cnt >= sk.trainMax) ||
+                  (sk.available && !sk.available(game.permHero));
     const row = document.createElement("div");
     row.className = "train-row";
-    row.innerHTML = `<div><div class="tname">${sk.name}</div><div class="tdesc">${sk.desc}</div></div>`;
+    row.innerHTML = `<div><div class="tname">${sk.name} <span style="color:#6fa3d4;font-size:11px">x${cnt}</span></div><div class="tdesc">${sk.desc}</div></div>`;
     const btn = document.createElement("button");
     btn.className = "train-buy";
-    btn.textContent = maxed ? "맥스" : "50킬";
-    btn.disabled = maxed || game.killCount < TRAIN_COST;
+    btn.textContent = maxed ? "맥스" : `${cost}킬`;
+    btn.disabled = maxed || game.killCount < cost;
     btn.onclick = () => {
-      if (game.killCount < TRAIN_COST) return;
-      game.killCount -= TRAIN_COST;
+      if (game.killCount < cost) return;
+      game.killCount -= cost;
       sk.apply(game.permHero, game);   // 영구 스탯에 적용
+      game.trainCounts[sk.name] = cnt + 1;
       resetHeroStats();                 // 현재 스탯에 즉시 반영
       refreshTrain();
     };
