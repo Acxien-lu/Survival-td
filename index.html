@@ -1495,7 +1495,10 @@ function update(dt) {
   }
   // 설치형 이도류 발도: 본체와 무관하게 각자 dualLevel회 연속 참격
   if (game.kendoSlashers && game.kendoSlashers.length > 0) {
+    // 총량 상한: 축지법 맥스 등으로 폭증해도 최신 40개만 유지
+    if (game.kendoSlashers.length > 40) game.kendoSlashers.splice(0, game.kendoSlashers.length - 40);
     for (const s of game.kendoSlashers) {
+      if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) { s.done = s.total; continue; }  // 좌표 방어
       s.timer -= dt;
       if (s.timer <= 0) {
         const r = s.baseR * (1 + 0.5 * s.done);   // 회차마다 +50%
@@ -1503,6 +1506,7 @@ function update(dt) {
         const r2 = r * r;
         for (let j = game.zombies.length - 1; j >= 0; j--) {
           const z = game.zombies[j];
+          if (!z || z.hp <= 0) continue;   // 이미 처치 예정인 좀비는 건너뜀 (중복 방지)
           const dx = z.x - s.x, dy = z.y - s.y;
           if (dx * dx + dy * dy < r2) {
             z.hp -= s.dmg * 1.5;
@@ -1514,7 +1518,6 @@ function update(dt) {
       }
     }
     game.kendoSlashers = game.kendoSlashers.filter(s => s.done < s.total);
-    if (game.kendoSlashers.length > 30) game.kendoSlashers.splice(0, game.kendoSlashers.length - 30);
   }
   // 만월참격 허공 일섬: 벽 5회 반사 후 본체 복귀 (하나라도 5회 채우면 전원 즉시 복귀)
   if (game.flyingIsseom && game.flyingIsseom.length > 0) {
