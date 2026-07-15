@@ -1210,7 +1210,13 @@ function resetGame() {
     ghost: null,         // 본관 창문의 귀신 (이스터에그)
     ghostCd: 6 + Math.random() * 12,
     equippedSkill: null, // 게임 동아리 특수 스킬 (id, 하나만 장착)
+    equippedSkill2: null,// 담임 선생님 슬롯 (40웨이브+, 2번째 스킬)
     skillCd: 0,
+    skillCd2: 0,
+    homeroom: false,     // 담임 선생님 합류 (40웨이브 종료 시)
+    principal: false,    // 교장 선생님 합류 (50웨이브 종료 시)
+    principalCards: false,// 교장: 전 카드 습득 상태로 시작 (온오프)
+    teacherMsg: null,    // 선생님 합류 메시지 { lines, t, step }
     warden: false,       // 사감 고용 여부 (동료 강화 공격 활성화)
     laserT: 0,           // 레이저 남은 시간 (미사용)
     laserBeam: null,     // 레이저 빔 좌표 (미사용)
@@ -1325,6 +1331,12 @@ window.addEventListener("touchend", onPointerUp);
 // 캠프 건물 탭: click 시점에 처리 — touchstart로 열면 뒤따라오는
 // 합성 click이 방금 뜬 팝업의 배경을 때려 즉시 닫히는 버그가 생김
 canvas.addEventListener("click", (e) => {
+  // 선생님 합류 메시지가 떠 있으면 탭으로 진행 (다른 입력보다 우선)
+  if (game.teacherMsg) {
+    game.teacherMsg.step++;
+    if (game.teacherMsg.step >= game.teacherMsg.lines.length) game.teacherMsg = null;
+    return;
+  }
   if (game.state !== "camp") return;
   const p = pointerLogical(e);
   campTap(p.x, p.y);
@@ -1391,7 +1403,18 @@ function update(dt) {
       const sk = SPECIAL_SKILLS.find(s => s.id === game.equippedSkill);
       if (sk && sk.run()) {
         game.skillCd = sk.cd;
-        // 발동 배너: 바리케이드 왼쪽 위에 잠깐 표시
+        const def = COMPANION_DEFS.find(d => d.name === sk.owner);
+        pushBanner(`${sk.name}!`, def ? def.color : "#e8e3d8", false);
+      }
+    }
+  }
+  // 담임 선생님 슬롯: 2번째 특수 스킬 (미출전 동료 스킬도 담임이 대신 사용)
+  if (game.homeroom && game.equippedSkill2) {
+    game.skillCd2 -= dt;
+    if (game.skillCd2 <= 0) {
+      const sk = SPECIAL_SKILLS.find(s => s.id === game.equippedSkill2);
+      if (sk && sk.run()) {
+        game.skillCd2 = sk.cd;
         const def = COMPANION_DEFS.find(d => d.name === sk.owner);
         pushBanner(`${sk.name}!`, def ? def.color : "#e8e3d8", false);
       }
@@ -1810,6 +1833,14 @@ function update(dt) {
   if (game.barricadeHp <= 0) { endGame(false); return; }
   if (game.spawnQueue === 0 && game.zombies.length === 0) {
     game.running = false;
+    // 40/50웨이브 종료 시 선생님 합류 이벤트
+    if (game.wave === 40 && !game.homeroom) {
+      game.homeroom = true;
+      game.teacherMsg = { lines: ["외근 나갔던 담임 선생님이 무사히 복귀했습니다.", "이제 전투에 담임 선생님의 도움을 받을 수 있습니다."], t: 0, step: 0 };
+    } else if (game.wave === 50 && !game.principal) {
+      game.principal = true;
+      game.teacherMsg = { lines: ["본관에서 나오지 못한 교장 선생님께서 합류하였습니다.", "교장 선생님의 풍부한 경험을 믿고 도움을 청해보자."], t: 0, step: 0 };
+    }
     if (game.wave % 10 === 0) enterCamp();
     else showCardChoices();
   }
@@ -2104,15 +2135,14 @@ function departCamp() {
   }
   for (const comp of allOwned()) if (comp.def.id !== "medic") applyCarryCard(comp);
   for (const comp of allOwned()) if (comp.def.id === "medic") applyCarryCard(comp);
-  // 🎮 치트: 출전 동료 전 카드 만렙 적용 (2층 좌측 관중석 연타로 발동)
-  if (game.cheatArmed) {
+  // 🎮 치트 or 교장 선생님: 출전 동료 전 카드 만렙 적용
+  if (game.cheatArmed || (game.principal && game.principalCards)) {
     for (const comp of game.companions) {
       comp.def.upgrades.forEach((up, i) => {
         while (comp.upLv[i] < up.maxLv) { up.apply(comp); comp.upLv[i]++; comp.level++; }
       });
     }
-    game.cheatArmed = false;
-    game.cheatBorderT = 0;
+    if (game.cheatArmed) { game.cheatArmed = false; game.cheatBorderT = 0; }
   }
   // 폭탄병: 지참/따라하기로 시작부터 적용된 폭탄광 수를 baseline으로 기록
   //   (웨이브 카드로 '추가로' 뽑은 폭탄광만 세어 확정 등장 판정하기 위함)
@@ -2258,7 +2288,7 @@ const SPECIAL_SKILLS = [
     id: "barrage", owner: "저격수", name: "탄환 세례", cd: 20,
     desc: "6턴 연속 사격 (턴당 기본+확인사살 전탄, 최대체력 조준) — 쿨 20초",
     run() {
-      const sn = game.companions.find(c => c.def.id === "sniper");
+      const sn = allOwned().find(c => c.def.id === "sniper");
       if (!sn || game.zombies.length === 0) return false;
       sn.barrageActive = true;
       sn.barrageTurns = 6;
@@ -2315,7 +2345,7 @@ const SPECIAL_SKILLS = [
     id: "homerun", owner: "야구부", name: "투런 홈런", cd: 25,
     desc: "5초간 야구부 모든 능력치 3배 (범위 포함) — 쿨 25초",
     run() {
-      const bt = game.companions.find(c => c.def.id === "batter");
+      const bt = allOwned().find(c => c.def.id === "batter");
       if (!bt) return false;   // 야구부가 출전 중이어야 발동
       game.homerunT = 5;
       kiBurst("batter");
@@ -2326,7 +2356,7 @@ const SPECIAL_SKILLS = [
     id: "comeback", owner: "축구부", name: "역전승", cd: 25,
     desc: "8초간 이동속도 +30%, 축구공 5개 추가 소환 (능력치 동일) — 쿨 25초",
     run() {
-      const sc = game.companions.find(c => c.def.id === "soccer");
+      const sc = allOwned().find(c => c.def.id === "soccer");
       if (!sc) return false;   // 축구부가 출전 중이어야 발동
       game.soccerRushT = 8;
       // 추가 공 5개: 부채꼴로 즉시 걷어참 (버프 종료 시 소멸)
@@ -2346,7 +2376,7 @@ const SPECIAL_SKILLS = [
     id: "kendoult", owner: "검도부", name: "만월참격", cd: 15,
     desc: "화면 정중앙으로 이동 후 2초간 화면 전체에 검살 난무 (쿨 15초)",
     run() {
-      const kn = game.companions.find(c => c.def.id === "kendo");
+      const kn = allOwned().find(c => c.def.id === "kendo");
       if (!kn) return false;
       game.kendoUltT = 2;
       game.kendoUltTick = 0;
@@ -2413,21 +2443,57 @@ function refreshClub() {
       <b style="color:#d9a441">30웨이브 클리어 후 개방</b> — 동료들의 특수 스킬을<br>하나 골라 장착하면 웨이브에서 자동 발동됩니다.</div>`;
     return;
   }
-  clubHint.textContent = "특수 스킬은 1개만 장착 가능 · 전투 중 자동 발동";
+  clubHint.textContent = game.homeroom
+    ? "본인 슬롯 + 담임 슬롯(미출전 동료 스킬도 가능) · 전투 중 자동 발동"
+    : "특수 스킬은 1개만 장착 가능 · 전투 중 자동 발동";
+
+  // 교장 선생님: 모든 카드 습득 상태로 시작 온/오프
+  if (game.principal) {
+    const prow = document.createElement("div");
+    prow.className = "train-row";
+    prow.innerHTML = `<div><div class="tname" style="color:#c9a8e0">[교장 선생님] 전 카드 습득 시작</div><div class="tdesc">출전 동료가 모든 카드를 배운 상태로 투입됩니다 (교장의 지도)</div></div>`;
+    const pbtn = document.createElement("button");
+    pbtn.className = "train-buy" + (game.principalCards ? " equipped" : "");
+    pbtn.textContent = game.principalCards ? "ON" : "OFF";
+    pbtn.onclick = () => { game.principalCards = !game.principalCards; refreshClub(); };
+    prow.appendChild(pbtn);
+    clubList.appendChild(prow);
+  }
+
   for (const sk of SPECIAL_SKILLS) {
     const row = document.createElement("div");
     row.className = "train-row";
+    // 담임 슬롯에서만 쓸 수 있는지: 본인 동료가 출전 중이 아니어도 담임이 대신 사용
+    const deployed = game.companions.some(c => c.def.name === sk.owner);
     row.innerHTML = `<div><div class="tname" style="color:#e8d9b8">[${sk.owner}] ${sk.name}</div><div class="tdesc">${sk.desc}</div></div>`;
+    const btnWrap = document.createElement("div");
+    btnWrap.style.display = "flex"; btnWrap.style.gap = "4px"; btnWrap.style.flexDirection = "column";
+    // 본인 슬롯 버튼
     const btn = document.createElement("button");
     btn.className = "train-buy" + (game.equippedSkill === sk.id ? " equipped" : "");
     btn.textContent = game.equippedSkill === sk.id ? "장착됨" : "장착";
     btn.onclick = () => {
-      // 이미 장착된 걸 다시 누르면 해제, 아니면 교체 장착
       game.equippedSkill = game.equippedSkill === sk.id ? null : sk.id;
-      game.skillCd = 3;   // 출정 후 3초 뒤 첫 발동 준비
+      if (game.equippedSkill2 === sk.id) game.equippedSkill2 = null;   // 중복 방지
+      game.skillCd = 3;
       refreshClub();
     };
-    row.appendChild(btn);
+    btnWrap.appendChild(btn);
+    // 담임 슬롯 버튼 (40웨이브+)
+    if (game.homeroom) {
+      const btn2 = document.createElement("button");
+      btn2.className = "train-buy" + (game.equippedSkill2 === sk.id ? " equipped" : "");
+      btn2.textContent = game.equippedSkill2 === sk.id ? "담임✓" : "담임";
+      btn2.style.fontSize = "11px";
+      btn2.onclick = () => {
+        game.equippedSkill2 = game.equippedSkill2 === sk.id ? null : sk.id;
+        if (game.equippedSkill === sk.id) game.equippedSkill = null;   // 중복 방지
+        game.skillCd2 = 3;
+        refreshClub();
+      };
+      btnWrap.appendChild(btn2);
+    }
+    row.appendChild(btnWrap);
     clubList.appendChild(row);
   }
 }
@@ -2665,7 +2731,7 @@ function drawCamp() {
    [11] 그리기 (전투)
    ================================================================ */
 function draw() {
-  if (game.state === "camp") { drawCamp(); return; }
+  if (game.state === "camp") { drawCamp(); drawTeacherMsg(); return; }
 
   if (IMAGES.background) {
     ctx.drawImage(IMAGES.background, 0, 0, W, H);
@@ -2769,6 +2835,11 @@ function draw() {
 
   // 주인공
   drawPlayer(game.playerX, CONFIG.playerY);
+
+  // 담임/교장 선생님 (화면 하단, 주인공 시작점 아래 — 머리와 어깨만 보임)
+  const teacherY = H - 8;
+  if (game.homeroom) drawTeacher(W / 2 - 34, teacherY, "#5a7a4a", "담임");   // 살짝 왼쪽
+  if (game.principal) drawTeacher(W / 2 + 34, teacherY, "#6a5a7a", "교장");   // 살짝 오른쪽
 
   // 좀비
   for (const z of game.zombies) drawZombie(z);
@@ -3257,6 +3328,40 @@ function draw() {
   ctx.fillStyle = "#fff";
   ctx.font = "10px sans-serif";
   ctx.fillText(`${Math.max(0, Math.ceil(game.barricadeHp))} / ${CONFIG.barricadeMaxHp}`, W / 2, 21);
+
+  drawTeacherMsg();
+}
+
+// 선생님 합류 메시지: 2단계로 눈에 띄게 표시 (탭하면 다음 단계 → 닫힘)
+function drawTeacherMsg() {
+  const m = game.teacherMsg;
+  if (!m) return;
+  m.t = (m.t || 0) + 1;
+  ctx.fillStyle = "rgba(10,12,16,0.72)";
+  ctx.fillRect(0, 0, W, H);
+  const boxY = H / 2 - 60;
+  ctx.fillStyle = "rgba(30,34,42,0.96)";
+  ctx.strokeStyle = "#c9a441";
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(24, boxY, W - 48, 120, 10); ctx.fill(); ctx.stroke();
+  const glow = 0.5 + Math.sin(m.t / 12) * 0.4;
+  ctx.fillStyle = `rgba(201,164,65,${glow})`;
+  ctx.fillRect(24, boxY, W - 48, 4);
+  ctx.fillStyle = "#f4ecd8";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  const text = m.lines[m.step] || "";
+  const words = text.split(" ");
+  let line = "", lines = [];
+  for (const w of words) {
+    if (ctx.measureText(line + w).width > W - 80) { lines.push(line); line = w + " "; }
+    else line += w + " ";
+  }
+  lines.push(line);
+  lines.forEach((ln, i) => ctx.fillText(ln.trim(), W / 2, boxY + 44 + i * 22));
+  ctx.fillStyle = `rgba(201,164,65,${glow})`;
+  ctx.font = "11px sans-serif";
+  ctx.fillText("\ud654\uba74\uc744 \ud130\uce58\ud558\uc138\uc694 \u25b6", W / 2, boxY + 104);
 }
 
 function drawPlayer(x, y) {
@@ -3267,6 +3372,52 @@ function drawPlayer(x, y) {
   ctx.beginPath(); ctx.arc(x, y - 14, 8, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#2b2b2b";
   ctx.fillRect(x - 2.5, y - 32, 5, 18);
+}
+
+// 담임/교장 선생님 — 화면 하단에 머리와 어깨까지만 보이게
+function drawTeacher(x, y, coatColor, label) {
+  // 어깨 (양복 코트)
+  ctx.fillStyle = coatColor;
+  ctx.beginPath();
+  ctx.moveTo(x - 20, y + 14);
+  ctx.quadraticCurveTo(x - 20, y - 2, x - 9, y - 4);
+  ctx.lineTo(x + 9, y - 4);
+  ctx.quadraticCurveTo(x + 20, y - 2, x + 20, y + 14);
+  ctx.closePath(); ctx.fill();
+  // 셔츠 카라
+  ctx.fillStyle = "#e8e4dc";
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y - 4); ctx.lineTo(x, y + 3); ctx.lineTo(x + 5, y - 4);
+  ctx.closePath(); ctx.fill();
+  // 넥타이
+  ctx.fillStyle = label === "교장" ? "#8a4a4a" : "#4a5a8a";
+  ctx.beginPath();
+  ctx.moveTo(x, y + 1); ctx.lineTo(x - 2, y + 12); ctx.lineTo(x + 2, y + 12);
+  ctx.closePath(); ctx.fill();
+  // 머리
+  ctx.fillStyle = "#e6c19c";
+  ctx.beginPath(); ctx.arc(x, y - 12, 9, 0, Math.PI * 2); ctx.fill();
+  // 머리카락 (교장은 반백)
+  ctx.fillStyle = label === "교장" ? "#b8b0a4" : "#3a2f28";
+  ctx.beginPath(); ctx.arc(x, y - 15, 9, Math.PI, 0); ctx.fill();
+  ctx.fillRect(x - 9, y - 16, 18, 4);
+  // 안경 (교장)
+  if (label === "교장") {
+    ctx.strokeStyle = "#3a3a3a"; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(x - 3.5, y - 11, 2.6, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 3.5, y - 11, 2.6, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - 1, y - 11); ctx.lineTo(x + 1, y - 11); ctx.stroke();
+  } else {
+    ctx.fillStyle = "#2b2b2b";
+    ctx.fillRect(x - 4, y - 12, 2, 2); ctx.fillRect(x + 2, y - 12, 2, 2);
+  }
+  // 이름표
+  ctx.fillStyle = "rgba(20,18,16,0.7)";
+  ctx.fillRect(x - 13, y - 28, 26, 12);
+  ctx.fillStyle = "#f0e8d8";
+  ctx.font = "bold 9px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(label, x, y - 19);
 }
 
 function drawCompanion(comp) {
