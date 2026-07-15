@@ -947,7 +947,7 @@ const COMPANION_DEFS = [
     initState: () => ({
       cooldown: 0, dmg: 72, jumpMax: 0, dualLevel: 0, atkCount: 0, tryCount: 0,
       cy: CONFIG.playerY, tpT: 0, tpFrom: null, tpTo: null, downT: 0, jumpsUsed: 0,
-      slashQueue: 0, slashTimer: 0, slashAt: null, slashBaseR: 70, haloT: 0, dualCount: 0,
+      slashQueue: 0, slashTimer: 0, slashAt: null, slashBaseR: 70, haloT: 0, dualCount: 0, dualCd: 0,
     }),
     update(comp, dt) {
       const R = 90;                     // 원형 사거리
@@ -956,12 +956,13 @@ const COMPANION_DEFS = [
       // 이도류 발도 연속 참격: 큐에 남은 후속타를 0.5초 간격으로 처리
       //   회차마다 범위 +50%씩 (2회차 +50%, 3회차 +100%, ...)
       if (comp.haloT > 0) comp.haloT -= dt;   // 천사링 지속 타이머
+      if (comp.dualCd > 0) comp.dualCd -= dt;   // 이도류 발도 내부 쿨
       if (comp.slashQueue > 0) {
         comp.slashTimer -= dt;
         if (comp.slashTimer <= 0) {
-          const total = comp.dualLevel;                 // 총 참격 횟수
-          const idx = total - comp.slashQueue;          // 이번이 몇 번째(0-base)
-          const r = comp.slashBaseR * (1 + 0.5 * idx);  // 0회차 기본, 이후 +50%씩
+          const total = comp.dualLevel;
+          const idx = Math.max(0, total - comp.slashQueue);   // 음수 방어
+          const r = comp.slashBaseR * (1 + 0.5 * idx);
           this.doSlash(comp, comp.slashAt, r);
           comp.slashQueue--;
           comp.slashTimer = 0.5;
@@ -1098,7 +1099,10 @@ const COMPANION_DEFS = [
       // 단일 직접 타격
       target.hp -= comp.dmg;
       game.effects.push({ type: "kendohit", x: target.x, y: target.y, life: 0.15 });
-      if (target.hp <= 0) killZombie(game.zombies.indexOf(target));
+      if (target.hp <= 0) {
+        const ti = game.zombies.indexOf(target);
+        if (ti >= 0) killZombie(ti);
+      }
     },
     // 이도류 발도: 공격 시도마다 카운트, 5번째 시도에서 현재 위치 기준 참격
     //   (타격이든 점프든 넘어짐이든 '시도'면 카운트 → 이동 도중에도 발동, 동작엔 영향 없음)
@@ -1106,6 +1110,10 @@ const COMPANION_DEFS = [
       if (comp.dualLevel <= 0) return;
       comp.dualCount = (comp.dualCount || 0) + 1;
       if (comp.dualCount % 5 !== 0) return;
+      // 안전장치: 이전 연속 참격이 진행 중이거나 내부 쿨이면 이번 발동은 건너뜀
+      if (comp.slashQueue > 0) return;
+      if (comp.dualCd && comp.dualCd > 0) return;
+      comp.dualCd = 0.1;   // 내부 쿨 0.1초
       const at = { x: comp.x, y: comp.cy };
       comp.haloT = 0.4 + (comp.dualLevel - 1) * 0.5 + 0.4;
       this.doSlash(comp, at, comp.slashBaseR);
@@ -1117,7 +1125,7 @@ const COMPANION_DEFS = [
     },
     // 원형 이도류 참격 (범위 r)
     doSlash(comp, at, r) {
-      if (!at) return;
+      if (!at || !(r > 0)) return;   // 유효하지 않은 범위 방어
       game.effects.push({ type: "kendoslash", x: at.x, y: at.y, r, life: 0.25 });
       const r2 = r * r;
       for (let j = game.zombies.length - 1; j >= 0; j--) {
@@ -1845,6 +1853,7 @@ function fireAt(target) {
 
 function killZombie(index) {
   const z = game.zombies[index];
+  if (!z) return;   // 잘못된/중복 인덱스 방어 (크래시 차단)
   spawnParticles(z.x, z.y, z.big ? "#7a9e4f" : "#5b7d3c", 6);
   game.zombies.splice(index, 1);
   game.killCount++;
