@@ -945,12 +945,27 @@ const COMPANION_DEFS = [
     mover: true,
     // dmg: 저격수 기본(90)의 80% = 72. cy: 현재 y좌표(맵을 돌아다님)
     initState: () => ({
-      cooldown: 0, dmg: 72, jumpMax: 0, dualBlade: false, atkCount: 0, tryCount: 0,
+      cooldown: 0, dmg: 72, jumpMax: 0, dualLevel: 0, atkCount: 0, tryCount: 0,
       cy: CONFIG.playerY, tpT: 0, tpFrom: null, tpTo: null, downT: 0, jumpsUsed: 0,
+      slashQueue: 0, slashTimer: 0, slashAt: null, slashBaseR: 70,
     }),
     update(comp, dt) {
       const R = 90;                     // 원형 사거리
       const tpSpeed = 800 * 0.9;        // 순간이동 속도 (폭탄 탄속의 90%)
+
+      // 이도류 발도 연속 참격: 큐에 남은 후속타를 0.5초 간격으로 처리
+      //   회차마다 범위 +50%씩 (2회차 +50%, 3회차 +100%, ...)
+      if (comp.slashQueue > 0) {
+        comp.slashTimer -= dt;
+        if (comp.slashTimer <= 0) {
+          const total = comp.dualLevel;                 // 총 참격 횟수
+          const idx = total - comp.slashQueue;          // 이번이 몇 번째(0-base)
+          const r = comp.slashBaseR * (1 + 0.5 * idx);  // 0회차 기본, 이후 +50%씩
+          this.doSlash(comp, comp.slashAt, r);
+          comp.slashQueue--;
+          comp.slashTimer = 0.5;
+        }
+      }
 
       // 넘어짐 상태: 1초 다운 → 0.2초 기상
       if (comp.downT > 0) {
@@ -1057,18 +1072,13 @@ const COMPANION_DEFS = [
       comp.tpT = comp.tpDur;
 
       comp.atkCount++;
-      // 이도류 발도: 5번째 공격마다 원형으로 강하게 벤다
-      if (comp.dualBlade && comp.atkCount % 5 === 0) {
-        const r = 70;
-        game.effects.push({ type: "kendoslash", x: target.x, y: target.y, r, life: 0.25 });
-        const r2 = r * r;
-        for (let j = game.zombies.length - 1; j >= 0; j--) {
-          const z = game.zombies[j];
-          const dx = z.x - target.x, dy = z.y - target.y;
-          if (dx * dx + dy * dy < r2) {
-            z.hp -= comp.dmg * 1.5;
-            if (z.hp <= 0) killZombie(j);
-          }
+      // 이도류 발도: 5번째 공격마다, 첫 참격 즉시 + 후속타는 큐로 연속(범위 +50%씩)
+      if (comp.dualLevel > 0 && comp.atkCount % 5 === 0) {
+        this.doSlash(comp, { x: target.x, y: target.y }, comp.slashBaseR);   // 1회차 즉시
+        if (comp.dualLevel > 1) {
+          comp.slashQueue = comp.dualLevel - 1;   // 남은 후속타
+          comp.slashTimer = 0.5;
+          comp.slashAt = { x: target.x, y: target.y };
         }
       } else {
         // 단일 직접 타격
@@ -1077,12 +1087,35 @@ const COMPANION_DEFS = [
         if (target.hp <= 0) killZombie(game.zombies.indexOf(target));
       }
     },
+    // 원형 이도류 참격 (범위 r)
+    doSlash(comp, at, r) {
+      if (!at) return;
+      game.effects.push({ type: "kendoslash", x: at.x, y: at.y, r, life: 0.25 });
+      const r2 = r * r;
+      for (let j = game.zombies.length - 1; j >= 0; j--) {
+        const z = game.zombies[j];
+        const dx = z.x - at.x, dy = z.y - at.y;
+        if (dx * dx + dy * dy < r2) {
+          z.hp -= comp.dmg * 1.5;
+          if (z.hp <= 0) killZombie(j);
+        }
+      }
+    },
     upgrades: [
       { name: "검도부: 검술 단련", desc: "타격 피해 +40%", maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
       { name: "검도부: 축지법",   desc: "점프 후 넘어지지 않고 한 번 더 점프 (2렙 맥스)", maxLv: 2, apply: c => c.jumpMax += 1 },
-      { name: "검도부: 이도류 발도", desc: "해금 — 5번째 공격마다 원형 이도류 참격", maxLv: 1, apply: c => c.dualBlade = true },
+      { name: "검도부: 이도류 발도", desc: "5번째 공격마다 원형 이도류 참격 (지참/따라하기로 연속타)", maxLv: 1, apply: c => c.dualLevel += 1 },
     ],
-    cardFilter: c => [0, 1, 2],
+    // 이도류 발도는 지참(+1)·의무병 따라하기(+1)로 맥스가 늘어 연속타가 됨
+    cardFilter: (c, carryIdx) => {
+      const copiedByMedic = allOwned().some(
+        o => o.def.id === "medic" && o.copyTarget === "kendo" && carryIdx === 2
+      );
+      const dualMax = 1 + (carryIdx === 2 ? 1 : 0) + (copiedByMedic ? 1 : 0);
+      const pool = [0, 1];
+      if ((c.upLv[2] || 0) < dualMax) pool.push(2);
+      return pool;
+    },
   },
 ];
 
@@ -3102,7 +3135,7 @@ function drawCompanion(comp) {
 
   // 검도부: 이도류 발도 해금 후 천사링, 천살(특수 스킬) 중 천사 날개
   if (comp.def.id === "kendo") {
-    if (comp.dualBlade) {
+    if (comp.dualLevel > 0) {
       ctx.strokeStyle = "#ffe680";
       ctx.lineWidth = 2.5;
       ctx.beginPath();
