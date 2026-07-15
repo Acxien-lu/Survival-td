@@ -271,7 +271,7 @@
     <p id="center-text">
       정문과 본관에서 &lt;놈들&gt;이 몰려온다.<br>
       강당 앞 바리케이드를 지켜라.<br>
-      드래그로 주인공을 <b>좌우</b>로 이동,<br>
+      드래그로 <b style="color:#7fb0e0">양궁부</b> 주인공을 <b>좌우</b>로 이동해 화살을 쏘고,<br>
       <b style="color:#d9a441">동료를 영입</b>하고 10웨이브마다 강당에서 정비하세요.
     </p>
     <button id="start-btn">전투 시작</button>
@@ -1154,12 +1154,12 @@ const COMPANION_DEFS = [
    ================================================================ */
 const HERO_SKILLS = [
   { name: "속사",       desc: "공격 속도 +10%",                       apply: s => s.fireRateMul += 0.10 },
-  { name: "고화력 탄환", desc: "공격력 +10%",                          apply: s => s.damageMul += 0.10 },
-  { name: "멀티 샷",     desc: "발사 탄환 +1 (최대 5발)",               apply: s => s.multishot += 1,
+  { name: "강궁",       desc: "공격력 +10%",                          apply: s => s.damageMul += 0.10 },
+  { name: "멀티 샷",     desc: "발사 화살 +1 (최대 5발)",               apply: s => s.multishot += 1,
     available: s => s.multishot < CONFIG.maxMultishot },
-  { name: "관통탄",      desc: "탄환이 적 1명을 추가 관통",              apply: s => s.pierce += 1 },
+  { name: "관통 화살",   desc: "화살이 적 1명을 추가 관통",              apply: s => s.pierce += 1 },
   { name: "넉백 강화",   desc: "명중 시 적을 밀어냄 +5 (최대 50)",       apply: s => s.knockback += 5, trainMax: 10 },
-  { name: "대구경 개조", desc: "공격력 +20%, 공격 속도 -5% (5회 맥스)",  apply: s => { s.damageMul += 0.20; s.fireRateMul -= 0.05; }, trainMax: 5 },
+  { name: "강화 화살촉", desc: "공격력 +20%, 공격 속도 -5% (5회 맥스)",  apply: s => { s.damageMul += 0.20; s.fireRateMul -= 0.05; }, trainMax: 5 },
 ];
 
 /* ================================================================
@@ -1912,6 +1912,7 @@ function fireAt(target) {
       vx: Math.cos(a) * CONFIG.baseBulletSpeed,
       vy: Math.sin(a) * CONFIG.baseBulletSpeed,
       hitsLeft: 1 + stats.pierce,
+      arrow: true,   // 양궁부: 화살
     });
   }
 }
@@ -3019,7 +3020,28 @@ function draw() {
 
   // 탄환
   for (const b of game.bullets) {
-    if (b.baseball) {
+    if (b.arrow) {
+      // 양궁부 화살: 진행 방향으로 회전한 화살 (촉 + 대 + 깃)
+      const ang = Math.atan2(b.vy, b.vx);
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(ang);
+      // 화살대
+      ctx.strokeStyle = "#8a6a3a";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(6, 0); ctx.stroke();
+      // 화살촉
+      ctx.fillStyle = "#d8d4c8";
+      ctx.beginPath();
+      ctx.moveTo(11, 0); ctx.lineTo(4, -3.2); ctx.lineTo(4, 3.2);
+      ctx.closePath(); ctx.fill();
+      // 깃 (fletching)
+      ctx.fillStyle = "#c33b2e";
+      ctx.beginPath();
+      ctx.moveTo(-10, 0); ctx.lineTo(-13, -3); ctx.lineTo(-8, 0); ctx.lineTo(-13, 3);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    } else if (b.baseball) {
       // 야구공: 흰 공 + 빨간 실밥 두 줄
       ctx.fillStyle = "#f4f2ec";
       ctx.beginPath(); ctx.arc(b.x, b.y, 5.5, 0, Math.PI * 2); ctx.fill();
