@@ -296,7 +296,7 @@ const ASSET_URLS = {
   batter: "assets/batter.png",
   soccer: "assets/soccer.png",
   kendo: "assets/kendo.png?v=2",       // 검도부 (여성, 파란 세일러 교복, 이도류, 날씬)
-  sedan: "assets/sedan.png",           // 차량 4종 (드라이버 출격)
+  sedan: "assets/sedan.png",           // 차량 4종 (공대생 출격)
   bike: "assets/bike.png",
   truck: "assets/truck.png",
   bus: "assets/bus.png",
@@ -356,7 +356,7 @@ function distToSeg(px, py, x0, y0, x1, y1) {
   return Math.hypot(px - cx, py - cy);
 }
 
-// 의무병 버프 헬퍼 — game 전역 상태를 읽어 배율 반환
+// 간호사 버프 헬퍼 — game 전역 상태를 읽어 배율 반환
 function adrenMul() { return game.medBuff && game.medBuff.kind === "adrenaline" ? 1.5 : 1; }  // 공속
 function dopaMul()  { return game.medBuff && game.medBuff.kind === "dopamine" ? 1.5 : 1; }     // 범위
 function dopaOn()   { return game.medBuff && game.medBuff.kind === "dopamine"; }               // 탄 넓이 2배 등
@@ -375,7 +375,7 @@ function moveToNearestX(comp, dt, speed) {
 
 const COMPANION_DEFS = [
   {
-    id: "sniper", name: "저격수", color: "#8e6fae",
+    id: "sniper", name: "예비군", color: "#8e6fae",
     recruitDesc: "가장 체력 높은 적 저격 (2초, 기본 3관통)",
     initState: () => ({ cooldown: 0, dmgMul: 1, pierce: 3, extraShots: 0, tapQueue: 0, tapTimer: 0, atkCount: 0, barrageActive: false, barrageTurns: 0, barrageShotsLeft: 0, barrageTimer: 0 }),
     fire(comp, isMain, barrage) {
@@ -389,7 +389,7 @@ const COMPANION_DEFS = [
       // 탄환 세례 중 발사 형태 결정
       const boss = game.zombies.some(z => z.boss);
       const converge = barrage && (game.zombies.length <= 1 || boss);   // 집중: 한 대상에 어깨동무
-      const multishot = barrage && game.medBuff && !converge;            // 의무병 버프 시 멀티샷
+      const multishot = barrage && game.medBuff && !converge;            // 간호사 버프 시 멀티샷
 
       const mkBullet = (angle, perpOffset) => {
         // perpOffset: 진행 방향에 수직으로 살짝 벌려 발사 (멀티샷/어깨동무 표현)
@@ -413,7 +413,7 @@ const COMPANION_DEFS = [
         mkBullet(aim, -5);
         mkBullet(aim, 5);
       } else if (multishot) {
-        // 의무병 버프: 양 옆으로 한 발씩 (서로 다른 각도)
+        // 간호사 버프: 양 옆으로 한 발씩 (서로 다른 각도)
         mainBullet = mkBullet(aim, 0);
         mkBullet(aim - 0.18, 0);
         mkBullet(aim + 0.18, 0);
@@ -469,16 +469,16 @@ const COMPANION_DEFS = [
       if (comp.extraShots > 0) { comp.tapQueue = comp.extraShots; comp.tapTimer = 0.3; }
     },
     upgrades: [
-      { name: "저격수: 대물 저격총", desc: "저격 피해 대폭 강화 (3렙 맥스)",                        maxLv: 3, apply: c => c.dmgMul *= 2.4025 },
-      { name: "저격수: 철갑탄",     desc: "관통 +2",                               maxLv: 3, apply: c => c.pierce += 2 },
-      { name: "저격수: 확인 사살",   desc: "연발 +1 (0.3초 간격 추가 사격)",           maxLv: 1, unlock: true, apply: c => c.extraShots += 1 },
+      { name: "예비군: 대물 저격총", desc: "저격 피해 대폭 강화 (3렙 맥스)",                        maxLv: 3, apply: c => c.dmgMul *= 2.4025 },
+      { name: "예비군: 철갑탄",     desc: "관통 +2",                               maxLv: 3, apply: c => c.pierce += 2 },
+      { name: "예비군: 확인 사살",   desc: "연발 +1 (0.3초 간격 추가 사격)",           maxLv: 1, unlock: true, apply: c => c.extraShots += 1 },
     ],
     // 카드 우선순위: 관통 1업 전까진 관통만.
     // 확인 사살은 어떤 강화든 1회 이상 후 등장 (관통 우선 규칙상 자동 충족)
     cardFilter: c => c.upLv[1] < 1 ? [1] : [0, 1, 2],
   },
   {
-    id: "medic", name: "의무병", color: "#5b9e7d",
+    id: "medic", name: "간호사", color: "#5b9e7d",
     recruitDesc: "접착 물약 투척 — 착지점에 감속 지역 생성 (2초마다)",
     initState: () => ({ cooldown: 1, throwCount: 0, pulseCd: 0 }),
     update(comp, dt) {
@@ -508,11 +508,11 @@ const COMPANION_DEFS = [
         }
       }
     },
-    upgrades: [],   // 의무병은 강화 카드 없음
+    upgrades: [],   // 간호사은 강화 카드 없음
     cardFilter: () => [],
   },
   {
-    id: "driver", name: "드라이버", color: "#c9884a",
+    id: "driver", name: "공대생", color: "#c9884a",
     recruitDesc: "10초마다 차량 출격, 경로의 적 격파 (증편 가능)",
     initState: () => ({ cooldown: 4, dmg: 32, interval: 10, fleet: 1, launchQueue: 0, launchTimer: 0, carCount: 0 }),
     update(comp, dt) {
@@ -560,15 +560,15 @@ const COMPANION_DEFS = [
       }
     },
     upgrades: [
-      { name: "드라이버: 차량 증편", desc: "차량 +1대 (최대 5대)",       maxLv: 4, apply: c => c.fleet += 1 },
-      { name: "드라이버: 강판 개조", desc: "차량 피해 +50 (3렙 맥스)",              maxLv: 3, apply: c => c.dmg += 50 },
-      { name: "드라이버: 예열 정비", desc: "출격 간격 -2초 (최소 4초)",   maxLv: 3, apply: c => c.interval = Math.max(4, c.interval - 2) },
+      { name: "공대생: 차량 증편", desc: "차량 +1대 (최대 5대)",       maxLv: 4, apply: c => c.fleet += 1 },
+      { name: "공대생: 강판 개조", desc: "차량 피해 +50 (3렙 맥스)",              maxLv: 3, apply: c => c.dmg += 50 },
+      { name: "공대생: 예열 정비", desc: "출격 간격 -2초 (최소 4초)",   maxLv: 3, apply: c => c.interval = Math.max(4, c.interval - 2) },
     ],
     // 카드 우선순위: 차량 3대가 될 때까진 증편만, 이후 셋 다 동일 확률
     cardFilter: c => c.fleet < 3 ? [0] : [0, 1, 2],
   },
   {
-    id: "bomber", name: "폭탄병", color: "#b5533c",
+    id: "bomber", name: "군인", color: "#b5533c",
     recruitDesc: "폭탄 투척 — 첫 명중 지점에 범위 피해 (2.5초)",
     initState: () => ({ cooldown: 1, dmg: 18, radiusLv: 0, atkCount: 0, bombKing: 0 }),
     update(comp, dt) {
@@ -611,17 +611,17 @@ const COMPANION_DEFS = [
       comp.cooldown = 2.5 / adrenMul();
     },
     upgrades: [
-      { name: "폭탄병: 확장 폭약", desc: "폭발 범위 확대 (3렙 맥스)", maxLv: 3, apply: c => c.radiusLv += 1 },
-      { name: "폭탄병: 고성능 화약", desc: "폭발 피해 대폭 강화 (3렙 맥스)",          maxLv: 3, apply: c => c.dmg = Math.round(c.dmg * 1.9656) },
-      { name: "폭탄병: 폭탄광",     desc: "폭탄이 2번 뒤로 튀며 연쇄 폭발 (펑 횟수 +1)", maxLv: 1, unlock: true, apply: c => c.bombKing += 1 },
+      { name: "군인: 확장 폭약", desc: "폭발 범위 확대 (3렙 맥스)", maxLv: 3, apply: c => c.radiusLv += 1 },
+      { name: "군인: 고성능 화약", desc: "폭발 피해 대폭 강화 (3렙 맥스)",          maxLv: 3, apply: c => c.dmg = Math.round(c.dmg * 1.9656) },
+      { name: "군인: 폭탄광",     desc: "폭탄이 2번 뒤로 튀며 연쇄 폭발 (펑 횟수 +1)", maxLv: 1, unlock: true, apply: c => c.bombKing += 1 },
     ],
     // 카드 우선순위:
     //  - 범위 1업 전까진 범위 카드만
     //  - 카드 2장 뽑은 뒤(강화 2회) & 아직 카드로 폭탄광 안 뽑았으면 폭탄광 확정
-    //  - 폭탄광 맥스 = 1 + 지참(+1) + 의무병 따라하기(+1). 맥스 미달이면 등장
+    //  - 폭탄광 맥스 = 1 + 지참(+1) + 간호사 따라하기(+1). 맥스 미달이면 등장
     cardFilter: (c, carryIdx) => {
       if (c.radiusLv < 1) return [0];
-      // 이 폭탄병을 따라하는 의무병이 있으면 폭탄광 맥스 +1
+      // 이 군인을 따라하는 간호사이 있으면 폭탄광 맥스 +1
       const copiedByMedic = allOwned().some(
         o => o.def.id === "medic" && o.copyTarget === "bomber" && carryIdx === 2
       );
@@ -943,7 +943,7 @@ const COMPANION_DEFS = [
     id: "kendo", name: "검도부", color: "#4a90c2",
     recruitDesc: "감염 면역 · 전방으로 돌격해 좀비를 직접 베고 순간이동 연격",
     mover: true,
-    // dmg: 저격수 기본(90)의 80% = 72. cy: 현재 y좌표(맵을 돌아다님)
+    // dmg: 예비군 기본(90)의 80% = 72. cy: 현재 y좌표(맵을 돌아다님)
     initState: () => ({
       cooldown: 0, dmg: 72, jumpMax: 0, dualLevel: 0, atkCount: 0, tryCount: 0,
       cy: CONFIG.playerY, tpT: 0, tpFrom: null, tpTo: null, downT: 0, jumpsUsed: 0,
@@ -1132,7 +1132,7 @@ const COMPANION_DEFS = [
       { name: "검도부: 축지법",   desc: "점프 후 넘어지지 않고 한 번 더 점프 (2렙 맥스)", maxLv: 2, apply: c => c.jumpMax += 1 },
       { name: "검도부: 이도류 발도", desc: "5번째 공격마다 원형 이도류 참격 (지참/따라하기로 연속타)", maxLv: 1, unlock: true, apply: c => c.dualLevel += 1 },
     ],
-    // 이도류 발도는 지참(+1)·의무병 따라하기(+1)로 맥스가 늘어 연속타가 됨
+    // 이도류 발도는 지참(+1)·간호사 따라하기(+1)로 맥스가 늘어 연속타가 됨
     cardFilter: (c, carryIdx) => {
       const copiedByMedic = allOwned().some(
         o => o.def.id === "medic" && o.copyTarget === "kendo" && carryIdx === 2
@@ -1194,9 +1194,9 @@ function resetGame() {
     zombies: [],
     cars: [],
     carSeq: 0,
-    drones: [],          // 드라이버 강화: 드론
-    gluePots: [],        // 의무병 접착 물약 (비행 중)
-    glueZones: [],       // 의무병 접착 지역 (착지 후)
+    drones: [],          // 공대생 강화: 드론
+    gluePots: [],        // 간호사 접착 물약 (비행 중)
+    glueZones: [],       // 간호사 접착 지역 (착지 후)
     medBuff: null,       // 아드레날린/도파민 버프 { kind, t }
     companions: [],      // 출전 중 (최대 4)
     reserve: [],         // 숙소 대기
@@ -1206,7 +1206,7 @@ function resetGame() {
     hitFlash: 0,
     particles: [],
     effects: [],         // 체인/폭발/스윙 이펙트
-    pushWave: null,      // 의무병 패시브 충격파 (바리케이드→위로 전진하는 파동)
+    pushWave: null,      // 간호사 패시브 충격파 (바리케이드→위로 전진하는 파동)
     ghost: null,         // 본관 창문의 귀신 (이스터에그)
     ghostCd: 6 + Math.random() * 12,
     equippedSkill: null, // 게임 동아리 특수 스킬 (id, 하나만 장착)
@@ -1217,10 +1217,11 @@ function resetGame() {
     principal: false,    // 교장 선생님 합류 (50웨이브 종료 시)
     principalCards: false,// 교장: 전 카드 습득 상태로 시작 (온오프)
     teacherMsg: null,    // 선생님 합류 메시지 { lines, t, step }
+    guest: null,         // 담임이 소환한 임시 게스트 동료
     warden: false,       // 사감 고용 여부 (동료 강화 공격 활성화)
     laserT: 0,           // 레이저 남은 시간 (미사용)
     laserBeam: null,     // 레이저 빔 좌표 (미사용)
-    barrageFireT: 0,     // 저격수 탄환 세례 불꽃 오라 지속
+    barrageFireT: 0,     // 예비군 탄환 세례 불꽃 오라 지속
     kendoUltT: 0,        // 검도부 만월참격 남은 시간
     kendoUltTick: 0,     // 만월참격 검살 발생 타이머
     flyingIsseom: [],    // 만월참격: 허공 일섬 5개 (벽 반사 후 복귀)
@@ -1411,15 +1412,25 @@ function update(dt) {
   // 담임 선생님 슬롯: 2번째 특수 스킬 (미출전 동료 스킬도 담임이 대신 사용)
   if (game.homeroom && game.equippedSkill2) {
     game.skillCd2 -= dt;
-    if (game.skillCd2 <= 0) {
+    if (game.skillCd2 <= 0 && !game.guest) {
       const sk = SPECIAL_SKILLS.find(s => s.id === game.equippedSkill2);
-      if (sk && sk.run()) {
-        game.skillCd2 = sk.cd;
-        const def = COMPANION_DEFS.find(d => d.name === sk.owner);
-        pushBanner(`${sk.name}!`, def ? def.color : "#e8e3d8", false);
+      if (sk) {
+        const buffSkills = { homerun: 5.5, comeback: 8.5, barrage: 5 };   // 버프형: 지속시간
+        const ownerDef = COMPANION_DEFS.find(d => d.name === sk.owner);
+        const ownerDeployed = game.companions.some(c => c.def.name === sk.owner);
+        if (buffSkills[sk.id] && !ownerDeployed && ownerDef) {
+          // 버프형인데 해당 동료가 미출전 → 담임이 호루라기 불고 만렙 동료 소환
+          summonGuest(ownerDef, sk, buffSkills[sk.id]);
+          game.skillCd2 = sk.cd;
+        } else if (sk.run()) {
+          game.skillCd2 = sk.cd;
+          const def = COMPANION_DEFS.find(d => d.name === sk.owner);
+          pushBanner(`${sk.name}!`, def ? def.color : "#e8e3d8", false);
+        }
       }
     }
   }
+  updateGuest(dt);
   for (let k = game.specialBanners.length - 1; k >= 0; k--) {
     game.specialBanners[k].life -= dt;
     if (game.specialBanners[k].life <= 0) game.specialBanners.splice(k, 1);
@@ -1645,7 +1656,7 @@ function update(dt) {
           z.hp -= b.damage !== undefined ? b.damage : CONFIG.baseDamage * stats.damageMul * (1 + 0.2 * game.campAtk);
           z.y -= stats.knockback;
           spawnParticles(z.x, z.y, "#c33b2e", 2);
-          // 저격수 강화: 명중 지점에 번개 폭발 (탄 피해와 동일, 소형 범위)
+          // 예비군 강화: 명중 지점에 번개 폭발 (탄 피해와 동일, 소형 범위)
           if (b.sniperBolt) {
             const br = 46;   // 번개 범위
             game.effects.push({ type: "boltburst", x: b.x, y: b.y, r: br, life: 0.22 });
@@ -1687,7 +1698,7 @@ function update(dt) {
     if (car.y < -60) game.cars.splice(i, 1);
   }
 
-  // 드론 (드라이버 강화): 목표 지점까지 비행하며 0.3초마다 최근접 적 직접 타격, 착지 시 폭발
+  // 드론 (공대생 강화): 목표 지점까지 비행하며 0.3초마다 최근접 적 직접 타격, 착지 시 폭발
   for (let i = game.drones.length - 1; i >= 0; i--) {
     const dr = game.drones[i];
     if (!dr.landed) {
@@ -1739,7 +1750,7 @@ function update(dt) {
     }
   }
 
-  // 의무병 접착 물약: 포물선 비행 → 착지 시 접착 지역 생성
+  // 간호사 접착 물약: 포물선 비행 → 착지 시 접착 지역 생성
   for (let i = game.gluePots.length - 1; i >= 0; i--) {
     const p = game.gluePots[i];
     p.t += dt;
@@ -1762,7 +1773,7 @@ function update(dt) {
       if (dx * dx + dy * dy < gr2) z.glued = 0.1;   // 다음 이동에서 감속 적용
     }
   }
-  // 의무병 버프(아드레날린/도파민) 타이머
+  // 간호사 버프(아드레날린/도파민) 타이머
   if (game.medBuff) {
     game.medBuff.t -= dt;
     if (game.medBuff.t <= 0) game.medBuff = null;
@@ -1847,7 +1858,7 @@ function update(dt) {
 }
 
 // 폭발: 반경 내 모든 적에게 피해.
-// fromBomb=true(폭탄병의 폭탄)일 때는 폭발 범위에 닿은 차량도 유폭시킴 (시너지)
+// fromBomb=true(군인의 폭탄)일 때는 폭발 범위에 닿은 차량도 유폭시킴 (시너지)
 // carBlast=true(차량 유폭)일 때는 훨씬 진한 화염 이펙트를 사용
 // 폭탄 기폭: 폭탄광이면 한 지점에서 여러 번(펑 횟수) 터지고,
 //   뒤로(위로) 튀어 이전 범위와 1/2 겹치는 위치에서 또 터짐 (바운스 2회 = 3지점).
@@ -1941,7 +1952,7 @@ function buildCardPool() {
     const deployed = game.companions.find(c => c.def.id === def.id);
     if (!owned) {
       if (canRecruit) {
-        // 의무병은 1~10웨이브에서 영입 카드 금지 (강당 합류로만 얻음)
+        // 간호사은 1~10웨이브에서 영입 카드 금지 (강당 합류로만 얻음)
         if (def.id === "medic" && game.wave <= 10) continue;
         recruits.push({
           tag: "동료 영입", cls: "recruit",
@@ -1955,7 +1966,7 @@ function buildCardPool() {
       const allowed = def.cardFilter ? def.cardFilter(deployed, deployed.carryCard) : def.upgrades.map((_, i) => i);
       def.upgrades.forEach((up, i) => {
         if (!allowed.includes(i)) return;
-        // 맥스 보너스: 지참 카드(+1), 그리고 이 동료·이 카드를 의무병이 따라하면(+1)
+        // 맥스 보너스: 지참 카드(+1), 그리고 이 동료·이 카드를 간호사이 따라하면(+1)
         let bonus = deployed.carryCard === i ? 1 : 0;
         if (deployed.carryCard === i) {
           const copied = allOwned().some(o => o.def.id === "medic" && o.copyTarget === deployed.def.id);
@@ -1975,7 +1986,7 @@ function buildCardPool() {
 }
 
 // 지참 카드 적용: 전투 시작 시 지정 카드를 1레벨 적용된 채로 시작
-// 의무병은 '따라하기' — copyTarget(동료 id)이 지참한 카드를 대상에게 한 번 더 적용
+// 간호사은 '따라하기' — copyTarget(동료 id)이 지참한 카드를 대상에게 한 번 더 적용
 function applyCarryCard(comp) {
   if (comp.def.id === "medic" && comp.copyTarget) {
     const src = allOwned().find(c => c.def.id === comp.copyTarget);
@@ -2085,6 +2096,7 @@ function enterCamp() {
   game.pushWave = null;
   game.laserT = 0; game.laserBeam = null; game.barrageFireT = 0;
   game.kendoUltT = 0; game.kendoUltTick = 0; game.flyingIsseom = []; game.kendoSlashers = [];
+  if (game.guest) { const gi = game.companions.indexOf(game.guest.comp); if (gi >= 0) game.companions.splice(gi, 1); game.guest = null; }
   game.bikerGang = null; game.carpet = null; game.overload = null;
   game.homerunT = 0; game.soccerRushT = 0;
   game.specialBanners = []; game.enhanceBanners = [];
@@ -2144,7 +2156,7 @@ function departCamp() {
     }
     if (game.cheatArmed) { game.cheatArmed = false; game.cheatBorderT = 0; }
   }
-  // 폭탄병: 지참/따라하기로 시작부터 적용된 폭탄광 수를 baseline으로 기록
+  // 군인: 지참/따라하기로 시작부터 적용된 폭탄광 수를 baseline으로 기록
   //   (웨이브 카드로 '추가로' 뽑은 폭탄광만 세어 확정 등장 판정하기 위함)
   for (const comp of allOwned()) {
     if (comp.def.id === "bomber") comp.baseBombKing = comp.upLv[2] || 0;
@@ -2246,7 +2258,7 @@ function refreshCarry() {
     wrap.appendChild(title);
 
     if (def.id === "medic") {
-      // 의무병: '따라하기' — 다른 출전 동료를 골라 그 동료의 지참 카드를 복제
+      // 간호사: '따라하기' — 다른 출전 동료를 골라 그 동료의 지참 카드를 복제
       const sub = document.createElement("div");
       sub.className = "tdesc";
       sub.textContent = "따라하기 — 동료를 선택하면 그 동료의 지참 카드를 한 번 더 적용";
@@ -2285,7 +2297,7 @@ wardenHire.onclick = () => {
    쿨다운을 소모하지 않고 다음 기회를 기다립니다. */
 const SPECIAL_SKILLS = [
   {
-    id: "barrage", owner: "저격수", name: "탄환 세례", cd: 20,
+    id: "barrage", owner: "예비군", name: "탄환 세례", cd: 20,
     desc: "6턴 연속 사격 (턴당 기본+확인사살 전탄, 최대체력 조준) — 쿨 20초",
     run() {
       const sn = allOwned().find(c => c.def.id === "sniper");
@@ -2294,13 +2306,13 @@ const SPECIAL_SKILLS = [
       sn.barrageTurns = 6;
       sn.barrageShotsLeft = 1 + sn.extraShots;
       sn.barrageTimer = 0;
-      game.barrageFireT = 3;   // 저격수 불꽃 오라 지속 (연출)
+      game.barrageFireT = 3;   // 예비군 불꽃 오라 지속 (연출)
       kiBurst("sniper");
       return true;
     },
   },
   {
-    id: "emergency", owner: "의무병", name: "긴급 수복", cd: 90,
+    id: "emergency", owner: "간호사", name: "긴급 수복", cd: 90,
     desc: "바리케이드 30% 이하 시 발동 — 전부 회복 (쿨 1분 30초)",
     run() {
       if (game.barricadeHp > CONFIG.barricadeMaxHp * 0.3) return false;
@@ -2312,7 +2324,7 @@ const SPECIAL_SKILLS = [
     },
   },
   {
-    id: "bikers", owner: "드라이버", name: "폭주족", cd: 25,
+    id: "bikers", owner: "공대생", name: "폭주족", cd: 25,
     desc: "좌/우 절반(랜덤)에 차량 12대가 0.5초 간격 연속 돌진 (쿨 25초)",
     run() {
       if (game.zombies.length === 0) return false;
@@ -2322,7 +2334,7 @@ const SPECIAL_SKILLS = [
     },
   },
   {
-    id: "carpet", owner: "폭탄병", name: "융단 폭격", cd: 25,
+    id: "carpet", owner: "군인", name: "융단 폭격", cd: 25,
     desc: "5초간 무작위 지역에 초당 미사일 8발 폭격 (쿨 25초)",
     run() {
       if (game.zombies.length === 0) return false;
@@ -2397,7 +2409,7 @@ const SPECIAL_SKILLS = [
   },
 ];
 
-// 배너 추가: plain=true(강화 공격/의무병 버프)는 위로 쌓이는 스택,
+// 배너 추가: plain=true(강화 공격/간호사 버프)는 위로 쌓이는 스택,
 //   아니면(게임 동아리 특수 스킬) 하단 고정 자리
 function pushBanner(text, color, plain) {
   const life = plain ? 1.9 : 1.9;   // 기존 1.4 + 0.5초
@@ -2407,6 +2419,60 @@ function pushBanner(text, color, plain) {
   } else {
     game.specialBanners.unshift({ text, color, life, born: performance.now() });
     if (game.specialBanners.length > 3) game.specialBanners.pop();
+  }
+}
+
+// ===== 담임 선생님의 미출전 동료 소환 (버프형 스킬용) =====
+//   호루라기 → 만렙 동료가 아래에서 등장 → 바리케이드 안쪽 착지 → 스킬 발동 → 강당쪽 퇴장
+function summonGuest(ownerDef, sk, buffDur) {
+  // 호루라기 이펙트: 담임 위치에서 삐익~
+  const tx = W / 2 - 34, ty = H - 8;
+  game.effects.push({ type: "whistle", x: tx, y: ty - 18, life: 1.2 });
+  pushBanner("삐익~! 담임 호출!", "#5a7a4a", true);
+  // 만렙 게스트 동료 생성 (스킬 주체)
+  const guest = { def: ownerDef, level: 1, upLv: ownerDef.upgrades.map(() => 0), x: W / 2, ...ownerDef.initState() };
+  ownerDef.upgrades.forEach((up, i) => {
+    while (guest.upLv[i] < up.maxLv) { up.apply(guest); guest.upLv[i]++; guest.level++; }
+  });
+  guest.cy = H + 30;               // 아래(강당쪽)에서 등장
+  guest.x = W / 2;
+  game.guest = {
+    comp: guest, sk, phase: "enter", t: 0, buffDur,
+    landX: W / 2, landY: CONFIG.playerY - 10,   // 바리케이드 안쪽 착지 지점
+  };
+}
+
+function updateGuest(dt) {
+  const g = game.guest;
+  if (!g) return;
+  g.t += dt;
+  const c = g.comp;
+  if (g.phase === "enter") {
+    // 아래에서 착지 지점으로 빠르게 진입
+    c.cy += (g.landY - c.cy) * Math.min(1, dt * 8);
+    if (Math.abs(c.cy - g.landY) < 6) {
+      c.cy = g.landY;
+      g.phase = "act";
+      g.t = 0;
+      // 게스트를 출전 목록에 잠시 편입 → 스킬이 정상 발동/버프 적용
+      game.companions.push(c);
+      if (g.sk.run()) {
+        const def = COMPANION_DEFS.find(d => d.name === g.sk.owner);
+        pushBanner(`${g.sk.name}!`, def ? def.color : "#e8e3d8", false);
+      }
+    }
+  } else if (g.phase === "act") {
+    // 버프 지속 동안 착지 지점에서 대기 (동료로서 실제 공격/버프 수행)
+    if (g.t >= g.buffDur) {
+      g.phase = "exit";
+      // 출전 목록에서 제거 (다시 미출전 상태로)
+      const idx = game.companions.indexOf(c);
+      if (idx >= 0) game.companions.splice(idx, 1);
+    }
+  } else if (g.phase === "exit") {
+    // 강당(아래)으로 퇴장
+    c.cy += 260 * dt;
+    if (c.cy > H + 40) game.guest = null;
   }
 }
 
@@ -2841,10 +2907,23 @@ function draw() {
   if (game.homeroom) drawTeacher(W / 2 - 34, teacherY, "#5a7a4a", "담임");   // 살짝 왼쪽
   if (game.principal) drawTeacher(W / 2 + 34, teacherY, "#6a5a7a", "교장");   // 살짝 오른쪽
 
+  // 담임이 소환한 게스트 동료 (등장/퇴장 중 별도 렌더 — act 중엔 companions로 그려짐)
+  if (game.guest && game.guest.phase !== "act") {
+    const gc = game.guest.comp;
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    // 간단 실루엣 (동료 색)
+    ctx.fillStyle = gc.def.color;
+    ctx.fillRect(gc.x - 9, gc.cy - 6, 18, 22);
+    ctx.fillStyle = "#e0b48c";
+    ctx.beginPath(); ctx.arc(gc.x, gc.cy - 12, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
   // 좀비
   for (const z of game.zombies) drawZombie(z);
 
-  // 의무병 접착 지역 (노란 끈적 지역)
+  // 간호사 접착 지역 (노란 끈적 지역)
   for (const gz of game.glueZones) {
     const a = Math.min(1, gz.t) * 0.5;
     ctx.fillStyle = `rgba(230,210,70,${a * 0.4})`;
@@ -2861,7 +2940,7 @@ function draw() {
     ctx.beginPath(); ctx.arc(p.x - 1.5, p.y - 1.5, 2.5, 0, Math.PI * 2); ctx.fill();
   }
 
-  // 드론 (드라이버 강화)
+  // 드론 (공대생 강화)
   // 만월참격 허공 일섬 (파란 섬광 궤적)
   if (game.flyingIsseom) for (const f of game.flyingIsseom) {
     ctx.strokeStyle = f.returning ? "#aee0ff" : "#dff0ff";
@@ -2975,7 +3054,7 @@ function draw() {
   // 이펙트 (체인 번개 / 폭발 / 스윙)
   for (const e of game.effects) {
     if (e.type === "medki") {
-      // 의무병 버프 기: 몸 주변 오라 + 캐릭터 키(약 48px)만큼만 위로
+      // 간호사 버프 기: 몸 주변 오라 + 캐릭터 키(약 48px)만큼만 위로
       const t = 1 - e.life / 0.5;
       const a = Math.sin((1 - t) * Math.PI / 2);
       const topY = e.y - 48 * Math.min(1, t * 2);
@@ -3062,6 +3141,25 @@ function draw() {
       ctx.strokeStyle = `rgba(255,200,120,${1 - t})`;          // 충격파 링
       ctx.lineWidth = 5;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r * t, 0, Math.PI * 2); ctx.stroke();
+    } else if (e.type === "whistle") {
+      // 담임 호루라기: 삐익~ 말풍선 + 소리 물결
+      const a = Math.max(0, e.life / 1.2);
+      ctx.globalAlpha = a;
+      // 말풍선
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.strokeStyle = "#5a7a4a";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(e.x - 4, e.y - 34, 44, 20, 6); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#3a4a2e";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("\uc0bc\uc775~!", e.x + 18, e.y - 20);
+      // 소리 물결
+      ctx.strokeStyle = `rgba(90,122,74,${a})`;
+      ctx.lineWidth = 2;
+      const rr = (1 - a) * 40 + 8;
+      ctx.beginPath(); ctx.arc(e.x, e.y, rr, -Math.PI / 3, Math.PI / 3); ctx.stroke();
+      ctx.globalAlpha = 1;
     } else if (e.type === "isseom") {
       // 일섬: 발동점→최원거리 직선 참격 섬광
       const a = Math.max(0, e.life / 0.3);
@@ -3209,7 +3307,7 @@ function draw() {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // 의무병 충격파 그리기: 위로 전진하는 초록빛 파동
+  // 간호사 충격파 그리기: 위로 전진하는 초록빛 파동
   if (game.pushWave) {
     const wy = game.pushWave.y;
     const grad = ctx.createLinearGradient(0, wy, 0, wy + 60);
