@@ -295,7 +295,7 @@ const ASSET_URLS = {
   engineer: "assets/engineer.png",
   batter: "assets/batter.png",
   soccer: "assets/soccer.png",
-  kendo: "assets/kendo.png",           // 검도부 (여성, 파란 세일러 교복, 이도류)
+  kendo: "assets/kendo.png?v=2",       // 검도부 (여성, 파란 세일러 교복, 이도류, 날씬)
   sedan: "assets/sedan.png",           // 차량 4종 (드라이버 출격)
   bike: "assets/bike.png",
   truck: "assets/truck.png",
@@ -947,7 +947,7 @@ const COMPANION_DEFS = [
     initState: () => ({
       cooldown: 0, dmg: 72, jumpMax: 0, dualLevel: 0, atkCount: 0, tryCount: 0,
       cy: CONFIG.playerY, tpT: 0, tpFrom: null, tpTo: null, downT: 0, jumpsUsed: 0,
-      slashQueue: 0, slashTimer: 0, slashAt: null, slashBaseR: 70,
+      slashQueue: 0, slashTimer: 0, slashAt: null, slashBaseR: 70, haloT: 0,
     }),
     update(comp, dt) {
       const R = 90;                     // 원형 사거리
@@ -955,6 +955,7 @@ const COMPANION_DEFS = [
 
       // 이도류 발도 연속 참격: 큐에 남은 후속타를 0.5초 간격으로 처리
       //   회차마다 범위 +50%씩 (2회차 +50%, 3회차 +100%, ...)
+      if (comp.haloT > 0) comp.haloT -= dt;   // 천사링 지속 타이머
       if (comp.slashQueue > 0) {
         comp.slashTimer -= dt;
         if (comp.slashTimer <= 0) {
@@ -1074,6 +1075,9 @@ const COMPANION_DEFS = [
       comp.atkCount++;
       // 이도류 발도: 5번째 공격마다, 첫 참격 즉시 + 후속타는 큐로 연속(범위 +50%씩)
       if (comp.dualLevel > 0 && comp.atkCount % 5 === 0) {
+        // 천사링: 참격 시작 직전부터 켜서 마지막 참격 후까지 유지
+        //   (총 참격 = dualLevel회, 후속타 간격 0.5초 + 여유 0.4초)
+        comp.haloT = 0.4 + (comp.dualLevel - 1) * 0.5 + 0.4;
         this.doSlash(comp, { x: target.x, y: target.y }, comp.slashBaseR);   // 1회차 즉시
         if (comp.dualLevel > 1) {
           comp.slashQueue = comp.dualLevel - 1;   // 남은 후속타
@@ -3135,7 +3139,7 @@ function drawCompanion(comp) {
 
   // 검도부: 이도류 발도 해금 후 천사링, 천살(특수 스킬) 중 천사 날개
   if (comp.def.id === "kendo") {
-    if (comp.dualLevel > 0) {
+    if (comp.haloT > 0) {
       ctx.strokeStyle = "#ffe680";
       ctx.lineWidth = 2.5;
       ctx.beginPath();
