@@ -947,7 +947,7 @@ const COMPANION_DEFS = [
     initState: () => ({
       cooldown: 0, dmg: 72, jumpMax: 0, dualLevel: 0, atkCount: 0, tryCount: 0,
       cy: CONFIG.playerY, tpT: 0, tpFrom: null, tpTo: null, downT: 0, jumpsUsed: 0,
-      slashBaseR: 70, haloT: 0, dualCount: 0,
+      slashBaseR: 70, haloT: 0, dualCount: 0, dualInstalled: 0,
     }),
     update(comp, dt) {
       const R = 90;                     // 원형 사거리
@@ -1096,15 +1096,21 @@ const COMPANION_DEFS = [
     //   (타격이든 점프든 넘어짐이든 '시도'면 카운트 → 이동 도중에도 발동, 동작엔 영향 없음)
     tryDualBlade(comp) {
       if (comp.dualLevel <= 0) return;
-      comp.dualCount = (comp.dualCount || 0) + 1;
-      if (comp.dualCount % 5 !== 0) return;
-      // 설치형: 현재 위치에 이도류 발도를 '설치'하고 본체는 계속 딜을 하러 감.
-      //   설치물은 본체와 무관하게 dualLevel회 연속 참격(0.5초 간격, 회차마다 +50%)을 수행.
-      game.kendoSlashers.push({
-        x: comp.x, y: comp.cy,
-        dmg: comp.dmg, baseR: comp.slashBaseR,
-        total: comp.dualLevel, done: 0, timer: 0,
-      });
+      // 매 공격 시도마다 1 + 축지법 레벨(jumpMax)만큼 카운트 증가.
+      //   → 연속 공격(축지법을 안 써도) 중에도 축지법 렙만큼 카운트가 더 빨리 차서 발도가 자주 나감.
+      comp.dualCount = (comp.dualCount || 0) + 1 + (comp.jumpMax || 0);
+      // 5의 배수를 넘긴 만큼 이도류 발도 설치 (한 번에 여러 개 깔릴 수 있음)
+      let installs = Math.floor(comp.dualCount / 5) - (comp.dualInstalled || 0);
+      if (installs <= 0) return;
+      if (installs > 3) installs = 3;   // 안전 상한 (한 시도당 최대 3개)
+      comp.dualInstalled = Math.floor(comp.dualCount / 5);
+      for (let k = 0; k < installs; k++) {
+        game.kendoSlashers.push({
+          x: comp.x, y: comp.cy,
+          dmg: comp.dmg, baseR: comp.slashBaseR,
+          total: comp.dualLevel, done: 0, timer: 0,
+        });
+      }
       comp.haloT = 0.4 + (comp.dualLevel - 1) * 0.5 + 0.4;
     },
     // 원형 이도류 참격 (범위 r)
