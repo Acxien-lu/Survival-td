@@ -1187,6 +1187,7 @@ function resetGame() {
     permHero: baseHeroStats(),   // 훈련소 영구 강화 (한 판 내내 유지, 캠프에도 안 지워짐)
     trainCounts: {},             // 훈련소 스킬별 구매 횟수 (가격 = 50 x 2^횟수)
     barricadeHp: CONFIG.barricadeMaxHp,
+    barricadeInvuln: 0,  // 긴급 수복 발동 시 바리케이드 무적 시간
     playerX: W / 2,
     fireCooldown: 0,
     bullets: [],
@@ -1473,6 +1474,7 @@ function update(dt) {
   // [투런 홈런] 버프 타이머
   if (game.homerunT > 0) game.homerunT -= dt;
   if (game.barrageFireT > 0) game.barrageFireT -= dt;
+  if (game.barricadeInvuln > 0) game.barricadeInvuln -= dt;
   // 검도부 만월참격: 2초간 화면 전체에 검살 난무
   if (game.kendoUltT > 0) {
     game.kendoUltT -= dt;
@@ -1764,7 +1766,11 @@ function update(dt) {
     } else {
       z.attackTimer -= dt;
       if (z.attackTimer <= 0) {
-        game.barricadeHp -= z.boss ? 12 : (z.big ? 4 : 1);   // 보스는 강타
+        if (game.barricadeInvuln > 0) {
+          // 무적 중: 피해 무시 (긴급 수복 1회 발동 효과)
+        } else {
+          game.barricadeHp -= z.boss ? 12 : (z.big ? 4 : 1);   // 보스는 강타
+        }
         game.hitFlash = 0.2;
         z.attackTimer = 1.0;
         if (stats.thorns > 0) {
@@ -2246,6 +2252,7 @@ const SPECIAL_SKILLS = [
     run() {
       if (game.barricadeHp > CONFIG.barricadeMaxHp * 0.3) return false;
       game.barricadeHp = CONFIG.barricadeMaxHp;
+      game.barricadeInvuln = 5;   // 발동 시 1회, 5초간 바리케이드 무적
       spawnParticles(W / 2, CONFIG.barricadeY, "#5b9e7d", 16);
       kiBurst("medic");
       return true;
@@ -2663,6 +2670,15 @@ function draw() {
   ctx.fillRect(10, CONFIG.barricadeY - 7, W - 20, 14);
   ctx.fillStyle = "rgba(0,0,0,0.25)";
   for (let x = 20; x < W - 20; x += 26) ctx.fillRect(x, CONFIG.barricadeY - 7, 5, 14);
+  // 긴급 수복 무적: 빛나는 방어막
+  if (game.barricadeInvuln > 0) {
+    const pulse = 0.4 + Math.sin(performance.now() / 100) * 0.25;
+    ctx.fillStyle = `rgba(120,220,170,${pulse})`;
+    ctx.fillRect(6, CONFIG.barricadeY - 12, W - 12, 24);
+    ctx.strokeStyle = `rgba(180,255,210,${pulse + 0.3})`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(6, CONFIG.barricadeY - 12, W - 12, 24);
+  }
   ctx.fillStyle = "rgba(200,190,160,0.4)";
   ctx.font = "10px sans-serif";
   ctx.textAlign = "center";
