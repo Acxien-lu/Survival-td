@@ -947,7 +947,7 @@ const COMPANION_DEFS = [
     initState: () => ({
       cooldown: 0, dmg: 72, jumpMax: 0, dualLevel: 0, atkCount: 0, tryCount: 0,
       cy: CONFIG.playerY, tpT: 0, tpFrom: null, tpTo: null, downT: 0, jumpsUsed: 0,
-      slashQueue: 0, slashTimer: 0, slashAt: null, slashBaseR: 70, haloT: 0, dualCount: 0, dualCd: 0,
+      slashBaseR: 70, haloT: 0, dualCount: 0,
     }),
     update(comp, dt) {
       const R = 90;                     // 원형 사거리
@@ -956,18 +956,6 @@ const COMPANION_DEFS = [
       // 이도류 발도 연속 참격: 큐에 남은 후속타를 0.5초 간격으로 처리
       //   회차마다 범위 +50%씩 (2회차 +50%, 3회차 +100%, ...)
       if (comp.haloT > 0) comp.haloT -= dt;   // 천사링 지속 타이머
-      if (comp.dualCd > 0) comp.dualCd -= dt;   // 이도류 발도 내부 쿨
-      if (comp.slashQueue > 0) {
-        comp.slashTimer -= dt;
-        if (comp.slashTimer <= 0) {
-          const total = comp.dualLevel;
-          const idx = Math.max(0, total - comp.slashQueue);   // 음수 방어
-          const r = comp.slashBaseR * (1 + 0.5 * idx);
-          this.doSlash(comp, comp.slashAt, r);
-          comp.slashQueue--;
-          comp.slashTimer = 0.5;
-        }
-      }
 
       // 넘어짐 상태: 1초 다운 → 0.2초 기상
       if (comp.downT > 0) {
@@ -1110,21 +1098,17 @@ const COMPANION_DEFS = [
       if (comp.dualLevel <= 0) return;
       comp.dualCount = (comp.dualCount || 0) + 1;
       if (comp.dualCount % 5 !== 0) return;
-      // 안전장치: 이전 연속 참격이 진행 중이거나 내부 쿨이면 이번 발동은 건너뜀
-      if (comp.slashQueue > 0) return;
-      if (comp.dualCd && comp.dualCd > 0) return;
-      comp.dualCd = 0.1;   // 내부 쿨 0.1초
-      const at = { x: comp.x, y: comp.cy };
+      // 설치형: 현재 위치에 이도류 발도를 '설치'하고 본체는 계속 딜을 하러 감.
+      //   설치물은 본체와 무관하게 dualLevel회 연속 참격(0.5초 간격, 회차마다 +50%)을 수행.
+      game.kendoSlashers.push({
+        x: comp.x, y: comp.cy,
+        dmg: comp.dmg, baseR: comp.slashBaseR,
+        total: comp.dualLevel, done: 0, timer: 0,
+      });
       comp.haloT = 0.4 + (comp.dualLevel - 1) * 0.5 + 0.4;
-      this.doSlash(comp, at, comp.slashBaseR);
-      if (comp.dualLevel > 1) {
-        comp.slashQueue = comp.dualLevel - 1;
-        comp.slashTimer = 0.5;
-        comp.slashAt = at;
-      }
     },
     // 원형 이도류 참격 (범위 r)
-    doSlash(comp, at, r) {
+    doSlash(dmg, at, r) {
       if (!at || !(r > 0)) return;   // 유효하지 않은 범위 방어
       game.effects.push({ type: "kendoslash", x: at.x, y: at.y, r, life: 0.25 });
       const r2 = r * r;
@@ -1132,7 +1116,7 @@ const COMPANION_DEFS = [
         const z = game.zombies[j];
         const dx = z.x - at.x, dy = z.y - at.y;
         if (dx * dx + dy * dy < r2) {
-          z.hp -= comp.dmg * 1.5;
+          z.hp -= dmg * 1.5;
           if (z.hp <= 0) killZombie(j);
         }
       }
@@ -1227,6 +1211,7 @@ function resetGame() {
     kendoUltT: 0,        // 검도부 만월참격 남은 시간
     kendoUltTick: 0,     // 만월참격 검살 발생 타이머
     flyingIsseom: [],    // 만월참격: 허공 일섬 5개 (벽 반사 후 복귀)
+    kendoSlashers: [],   // 설치형 이도류 발도 (본체와 독립적으로 연속 참격 수행)
     bikerGang: null,     // 폭주족 출격 대기열
     carpet: null,        // 융단 폭격 진행 상태
     overload: null,      // 과부하 방전 진행 상태
@@ -1507,6 +1492,29 @@ function update(dt) {
         }
       }
     }
+  }
+  // 설치형 이도류 발도: 본체와 무관하게 각자 dualLevel회 연속 참격
+  if (game.kendoSlashers && game.kendoSlashers.length > 0) {
+    for (const s of game.kendoSlashers) {
+      s.timer -= dt;
+      if (s.timer <= 0) {
+        const r = s.baseR * (1 + 0.5 * s.done);   // 회차마다 +50%
+        game.effects.push({ type: "kendoslash", x: s.x, y: s.y, r, life: 0.25 });
+        const r2 = r * r;
+        for (let j = game.zombies.length - 1; j >= 0; j--) {
+          const z = game.zombies[j];
+          const dx = z.x - s.x, dy = z.y - s.y;
+          if (dx * dx + dy * dy < r2) {
+            z.hp -= s.dmg * 1.5;
+            if (z.hp <= 0) killZombie(j);
+          }
+        }
+        s.done++;
+        s.timer = 0.5;
+      }
+    }
+    game.kendoSlashers = game.kendoSlashers.filter(s => s.done < s.total);
+    if (game.kendoSlashers.length > 30) game.kendoSlashers.splice(0, game.kendoSlashers.length - 30);
   }
   // 만월참격 허공 일섬: 벽 5회 반사 후 본체 복귀 (하나라도 5회 채우면 전원 즉시 복귀)
   if (game.flyingIsseom && game.flyingIsseom.length > 0) {
@@ -2030,7 +2038,7 @@ function enterCamp() {
   game.gluePots = []; game.glueZones = []; game.medBuff = null;
   game.pushWave = null;
   game.laserT = 0; game.laserBeam = null; game.barrageFireT = 0;
-  game.kendoUltT = 0; game.kendoUltTick = 0; game.flyingIsseom = [];
+  game.kendoUltT = 0; game.kendoUltTick = 0; game.flyingIsseom = []; game.kendoSlashers = [];
   game.bikerGang = null; game.carpet = null; game.overload = null;
   game.homerunT = 0; game.soccerRushT = 0;
   game.specialBanners = []; game.enhanceBanners = [];
