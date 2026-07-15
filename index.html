@@ -616,14 +616,20 @@ const COMPANION_DEFS = [
     ],
     // 카드 우선순위:
     //  - 범위 1업 전까진 범위 카드만
-    //  - 폭탄광 미보유 + 총 2렙(강화 2회) 이상이면 다음 카드는 폭탄광 확정
-    //  - 폭탄광은 지참 시 맥스가 +1 되므로, 맥스 미달이면 계속 등장 (중첩 기믹)
+    //  - 카드 2장 뽑은 뒤(강화 2회) & 아직 카드로 폭탄광 안 뽑았으면 폭탄광 확정
+    //  - 폭탄광 맥스 = 1 + 지참(+1) + 의무병 따라하기(+1). 맥스 미달이면 등장
     cardFilter: (c, carryIdx) => {
       if (c.radiusLv < 1) return [0];
-      const bombKingMax = 1 + (carryIdx === 2 ? 1 : 0);   // 지참 시 +1
-      const bombKingAvail = c.upLv[2] < bombKingMax;
-      const totalLv = c.upLv.reduce((s, v) => s + v, 0);
-      if (bombKingAvail && c.upLv[2] < 1 && totalLv >= 2) return [2];   // 첫 폭탄광 확정
+      // 이 폭탄병을 따라하는 의무병이 있으면 폭탄광 맥스 +1
+      const copiedByMedic = allOwned().some(
+        o => o.def.id === "medic" && o.copyTarget === "bomber" && carryIdx === 2
+      );
+      const bombKingMax = 1 + (carryIdx === 2 ? 1 : 0) + (copiedByMedic ? 1 : 0);
+      const bombKingAvail = (c.upLv[2] || 0) < bombKingMax;
+      // 카드로 뽑은 폭탄광 수 = 현재 upLv - 지참/따라하기 시작분(baseBombKing)
+      const cardPicked = (c.upLv[2] || 0) - (c.baseBombKing || 0);
+      const totalCardLv = c.upLv.reduce((s, v) => s + v, 0) - (c.baseBombKing || 0);
+      if (bombKingAvail && cardPicked < 1 && totalCardLv >= 2) return [2];   // 첫 폭탄광 확정
       const pool = [0, 1];
       if (bombKingAvail) pool.push(2);
       return pool;
@@ -1611,7 +1617,12 @@ function buildCardPool() {
       const allowed = def.cardFilter ? def.cardFilter(deployed, deployed.carryCard) : def.upgrades.map((_, i) => i);
       def.upgrades.forEach((up, i) => {
         if (!allowed.includes(i)) return;
-        const bonus = deployed.carryCard === i ? 1 : 0;   // 지참 카드는 맥스 +1
+        // 맥스 보너스: 지참 카드(+1), 그리고 이 동료·이 카드를 의무병이 따라하면(+1)
+        let bonus = deployed.carryCard === i ? 1 : 0;
+        if (deployed.carryCard === i) {
+          const copied = allOwned().some(o => o.def.id === "medic" && o.copyTarget === deployed.def.id);
+          if (copied) bonus += 1;
+        }
         if (deployed.upLv[i] >= up.maxLv + bonus) return;   // 맥스 도달 카드는 제외
         others.push({
           tag: `${def.name} 강화 (${deployed.upLv[i]}/${up.maxLv + bonus})`, cls: "ally",
@@ -1763,6 +1774,11 @@ function departCamp() {
   }
   for (const comp of allOwned()) if (comp.def.id !== "medic") applyCarryCard(comp);
   for (const comp of allOwned()) if (comp.def.id === "medic") applyCarryCard(comp);
+  // 폭탄병: 지참/따라하기로 시작부터 적용된 폭탄광 수를 baseline으로 기록
+  //   (웨이브 카드로 '추가로' 뽑은 폭탄광만 세어 확정 등장 판정하기 위함)
+  for (const comp of allOwned()) {
+    if (comp.def.id === "bomber") comp.baseBombKing = comp.upLv[2] || 0;
+  }
   game.state = "battle";
   startWave(game.wave + 1);
   game.running = true;
