@@ -469,7 +469,7 @@ const COMPANION_DEFS = [
       if (comp.extraShots > 0) { comp.tapQueue = comp.extraShots; comp.tapTimer = 0.3; }
     },
     upgrades: [
-      { name: "저격수: 대물 저격총", desc: "저격 피해 +55%",                        maxLv: 6, apply: c => c.dmgMul *= 1.55 },
+      { name: "저격수: 대물 저격총", desc: "저격 피해 대폭 강화 (3렙 맥스)",                        maxLv: 3, apply: c => c.dmgMul *= 2.4025 },
       { name: "저격수: 철갑탄",     desc: "관통 +2",                               maxLv: 3, apply: c => c.pierce += 2 },
       { name: "저격수: 확인 사살",   desc: "연발 +1 (0.3초 간격 추가 사격)",           maxLv: 1, unlock: true, apply: c => c.extraShots += 1 },
     ],
@@ -561,7 +561,7 @@ const COMPANION_DEFS = [
     },
     upgrades: [
       { name: "드라이버: 차량 증편", desc: "차량 +1대 (최대 5대)",       maxLv: 4, apply: c => c.fleet += 1 },
-      { name: "드라이버: 강판 개조", desc: "차량 피해 +30",              maxLv: 5, apply: c => c.dmg += 30 },
+      { name: "드라이버: 강판 개조", desc: "차량 피해 +50 (3렙 맥스)",              maxLv: 3, apply: c => c.dmg += 50 },
       { name: "드라이버: 예열 정비", desc: "출격 간격 -2초 (최소 4초)",   maxLv: 3, apply: c => c.interval = Math.max(4, c.interval - 2) },
     ],
     // 카드 우선순위: 차량 3대가 될 때까진 증편만, 이후 셋 다 동일 확률
@@ -612,7 +612,7 @@ const COMPANION_DEFS = [
     },
     upgrades: [
       { name: "폭탄병: 확장 폭약", desc: "폭발 범위 확대 (3렙 맥스)", maxLv: 3, apply: c => c.radiusLv += 1 },
-      { name: "폭탄병: 고성능 화약", desc: "폭발 피해 +50%",          maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.5) },
+      { name: "폭탄병: 고성능 화약", desc: "폭발 피해 대폭 강화 (3렙 맥스)",          maxLv: 3, apply: c => c.dmg = Math.round(c.dmg * 1.9656) },
       { name: "폭탄병: 폭탄광",     desc: "폭탄이 2번 뒤로 튀며 연쇄 폭발 (펑 횟수 +1)", maxLv: 1, unlock: true, apply: c => c.bombKing += 1 },
     ],
     // 카드 우선순위:
@@ -713,7 +713,7 @@ const COMPANION_DEFS = [
     },
     upgrades: [
       { name: "기공사: 전격 체인", desc: "체인 +2 (추가로 적 2명에게 튕김, 3렙 맥스)", maxLv: 3, apply: c => c.chains += 2 },
-      { name: "기공사: 과부하",   desc: "피해 +40%",                                     maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
+      { name: "기공사: 과부하",   desc: "피해 대폭 강화 (3렙 맥스)",                                     maxLv: 3, apply: c => c.dmg = Math.round(c.dmg * 1.7521) },
     ],
   },
   {
@@ -796,7 +796,7 @@ const COMPANION_DEFS = [
     },
     upgrades: [
       { name: "야구부: 긴 배트", desc: "스윙 범위 +28% (3렙 맥스, 화면 절반 한도)", maxLv: 3, apply: c => c.rangeLv += 1 },
-      { name: "야구부: 강타",   desc: "타격 피해 +40%",            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
+      { name: "야구부: 강타",   desc: "타격 피해 대폭 강화 (3렙 맥스)",            maxLv: 3, apply: c => c.dmg = Math.round(c.dmg * 1.7521) },
     ],
   },
   {
@@ -933,7 +933,7 @@ const COMPANION_DEFS = [
     },
     upgrades: [
       { name: "축구부: 강슛 훈련",  desc: "축구공 속도 +177 (3렙 맥스 시 저격탄의 70%)", maxLv: 3, apply: c => c.ballSpeed += 177 },
-      { name: "축구부: 정조준 킥",  desc: "축구공 피해 +40%",                            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
+      { name: "축구부: 정조준 킥",  desc: "축구공 피해 대폭 강화 (3렙 맥스)",                            maxLv: 3, apply: c => c.dmg = Math.round(c.dmg * 1.7521) },
       { name: "축구부: 여분의 공",  desc: "축구공 +1개 (2번째부터 뱅크샷 전용)",          maxLv: 1, unlock: true, apply: c => c.ballCount += 1 },
     ],
     // 카드 우선순위: 공 속도 1렙까진 속도만, 이후 셋 다 동일 확률
@@ -1130,7 +1130,7 @@ const COMPANION_DEFS = [
       }
     },
     upgrades: [
-      { name: "검도부: 검술 단련", desc: "타격 피해 +40%", maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
+      { name: "검도부: 검술 단련", desc: "타격 피해 대폭 강화 (3렙 맥스)", maxLv: 3, apply: c => c.dmg = Math.round(c.dmg * 1.7521) },
       { name: "검도부: 축지법",   desc: "점프 후 넘어지지 않고 한 번 더 점프 (2렙 맥스)", maxLv: 2, apply: c => c.jumpMax += 1 },
       { name: "검도부: 이도류 발도", desc: "5번째 공격마다 원형 이도류 참격 (지참/따라하기로 연속타)", maxLv: 1, unlock: true, apply: c => c.dualLevel += 1 },
     ],
