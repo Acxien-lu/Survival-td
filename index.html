@@ -471,7 +471,7 @@ const COMPANION_DEFS = [
     upgrades: [
       { name: "저격수: 대물 저격총", desc: "저격 피해 +55%",                        maxLv: 6, apply: c => c.dmgMul *= 1.55 },
       { name: "저격수: 철갑탄",     desc: "관통 +2",                               maxLv: 3, apply: c => c.pierce += 2 },
-      { name: "저격수: 확인 사살",   desc: "연발 +1 (0.3초 간격 추가 사격)",           maxLv: 1, apply: c => c.extraShots += 1 },
+      { name: "저격수: 확인 사살",   desc: "연발 +1 (0.3초 간격 추가 사격)",           maxLv: 1, unlock: true, apply: c => c.extraShots += 1 },
     ],
     // 카드 우선순위: 관통 1업 전까진 관통만.
     // 확인 사살은 어떤 강화든 1회 이상 후 등장 (관통 우선 규칙상 자동 충족)
@@ -613,7 +613,7 @@ const COMPANION_DEFS = [
     upgrades: [
       { name: "폭탄병: 확장 폭약", desc: "폭발 범위 확대 (3렙 맥스)", maxLv: 3, apply: c => c.radiusLv += 1 },
       { name: "폭탄병: 고성능 화약", desc: "폭발 피해 +50%",          maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.5) },
-      { name: "폭탄병: 폭탄광",     desc: "폭탄이 2번 뒤로 튀며 연쇄 폭발 (펑 횟수 +1)", maxLv: 1, apply: c => c.bombKing += 1 },
+      { name: "폭탄병: 폭탄광",     desc: "폭탄이 2번 뒤로 튀며 연쇄 폭발 (펑 횟수 +1)", maxLv: 1, unlock: true, apply: c => c.bombKing += 1 },
     ],
     // 카드 우선순위:
     //  - 범위 1업 전까진 범위 카드만
@@ -934,7 +934,7 @@ const COMPANION_DEFS = [
     upgrades: [
       { name: "축구부: 강슛 훈련",  desc: "축구공 속도 +177 (3렙 맥스 시 저격탄의 70%)", maxLv: 3, apply: c => c.ballSpeed += 177 },
       { name: "축구부: 정조준 킥",  desc: "축구공 피해 +40%",                            maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
-      { name: "축구부: 여분의 공",  desc: "축구공 +1개 (2번째부터 뱅크샷 전용)",          maxLv: 1, apply: c => c.ballCount += 1 },
+      { name: "축구부: 여분의 공",  desc: "축구공 +1개 (2번째부터 뱅크샷 전용)",          maxLv: 1, unlock: true, apply: c => c.ballCount += 1 },
     ],
     // 카드 우선순위: 공 속도 1렙까진 속도만, 이후 셋 다 동일 확률
     cardFilter: c => c.upLv[0] < 1 ? [0] : [0, 1, 2],
@@ -947,7 +947,7 @@ const COMPANION_DEFS = [
     initState: () => ({
       cooldown: 0, dmg: 72, jumpMax: 0, dualLevel: 0, atkCount: 0, tryCount: 0,
       cy: CONFIG.playerY, tpT: 0, tpFrom: null, tpTo: null, downT: 0, jumpsUsed: 0,
-      slashQueue: 0, slashTimer: 0, slashAt: null, slashBaseR: 70, haloT: 0,
+      slashQueue: 0, slashTimer: 0, slashAt: null, slashBaseR: 70, haloT: 0, dualCount: 0,
     }),
     update(comp, dt) {
       const R = 90;                     // 원형 사거리
@@ -983,7 +983,25 @@ const COMPANION_DEFS = [
         if (Math.random() < 0.6) game.effects.push({ type: "kendoafter", x: comp.x, y: comp.cy, life: 0.18 });
         if (comp.tpT <= 0) {
           comp.x = comp.tpTo.x; comp.cy = comp.tpTo.y;
-          if (comp.fallAfterTp) { comp.fallAfterTp = false; comp.downT = 1.0; }
+          if (comp.afterJump) {
+            comp.afterJump = false;
+            const R = 90;
+            // 도착지 근처(사거리 내)에 적이 있는지 확인
+            let hasNear = false;
+            for (const z of game.zombies) {
+              const dx = z.x - comp.x, dy = z.y - comp.cy;
+              if (dx * dx + dy * dy < R * R) { hasNear = true; break; }
+            }
+            if (hasNear) {
+              comp.cooldown = 0;   // 즉시 공격 이어감
+            } else if (comp.jumpsUsed < comp.jumpMax) {
+              comp.jumpsUsed++;     // 축지법: 넘어지지 않고 0.2초 뒤 또 점프
+              comp.cooldown = 0.2;
+            } else {
+              comp.downT = 1.0;     // 넘어짐
+              comp.jumpsUsed = 0;
+            }
+          }
         }
         return;
       }
@@ -1025,7 +1043,7 @@ const COMPANION_DEFS = [
           if (proj < 0 || proj > pathLen + 20) continue;
           const perp = Math.abs(-vx * Math.sin(ang) + vy * Math.cos(ang));
           if (perp < 26) {
-            z.hp -= comp.dmg * 2;
+            z.hp -= comp.dmg * 4;   // 일섬 피해 (기존 2배 → 4배)
             if (z.hp <= 0) killZombie(j);
           }
         }
@@ -1044,6 +1062,7 @@ const COMPANION_DEFS = [
 
       if (target) {
         // 사거리 내 적: 순간이동해 직접 타격 (일섬 발동 시 그쪽으로 이동)
+        this.tryDualBlade(comp);          // 공격 시도 → 이도류 발도 카운트
         if (doIsseom()) return;
         this.strike(comp, target);
         comp.jumpsUsed = 0;   // 정상 타격 시 점프 카운터 리셋
@@ -1056,7 +1075,8 @@ const COMPANION_DEFS = [
           if (d2 < nd) { nd = d2; near = z; }
         }
         if (!near) return;
-        if (doIsseom()) return;   // 점프 대신 일섬 발동 시 그쪽으로 이동(넘어짐 없음)
+        this.tryDualBlade(comp);          // 점프(넘어짐 포함)도 공격 시도 → 이도류 발도 카운트
+        if (doIsseom()) return;
         const ang = Math.atan2(near.y - comp.cy, near.x - comp.x);
         const tx = Math.max(30, Math.min(W - 30, comp.x + Math.cos(ang) * R));
         const ty = Math.max(80, Math.min(CONFIG.playerY, comp.cy + Math.sin(ang) * R));
@@ -1064,15 +1084,8 @@ const COMPANION_DEFS = [
         comp.tpTo = { x: tx, y: ty };
         comp.tpDur = R / tpSpeed;
         comp.tpT = comp.tpDur;
-        // 점프 후 넘어짐 — 단 점프 업글이 있으면 jumpMax회까지 안 넘어지고 재점프
-        if (comp.jumpsUsed < comp.jumpMax) {
-          comp.jumpsUsed++;
-          comp.cooldown = 0;        // 착지 즉시 재판단(또 점프 가능)
-        } else {
-          comp.downT = 0;
-          comp.fallAfterTp = true;  // 순간이동 끝나면 넘어짐
-          comp.cooldown = 0.2;
-        }
+        comp.afterJump = true;   // 착지 시 도착지 근처 적 유무로 공격/넘어짐 판정
+        comp.cooldown = 0.2;     // 연속 축지법 간격
       }
     },
     // 직접 타격
@@ -1082,24 +1095,24 @@ const COMPANION_DEFS = [
       comp.tpTo = { x: target.x, y: target.y };
       comp.tpDur = 0.06;
       comp.tpT = comp.tpDur;
-
-      comp.atkCount++;
-      // 이도류 발도: 5번째 공격마다, 첫 참격 즉시 + 후속타는 큐로 연속(범위 +50%씩)
-      if (comp.dualLevel > 0 && comp.atkCount % 5 === 0) {
-        // 천사링: 참격 시작 직전부터 켜서 마지막 참격 후까지 유지
-        //   (총 참격 = dualLevel회, 후속타 간격 0.5초 + 여유 0.4초)
-        comp.haloT = 0.4 + (comp.dualLevel - 1) * 0.5 + 0.4;
-        this.doSlash(comp, { x: target.x, y: target.y }, comp.slashBaseR);   // 1회차 즉시
-        if (comp.dualLevel > 1) {
-          comp.slashQueue = comp.dualLevel - 1;   // 남은 후속타
-          comp.slashTimer = 0.5;
-          comp.slashAt = { x: target.x, y: target.y };
-        }
-      } else {
-        // 단일 직접 타격
-        target.hp -= comp.dmg;
-        game.effects.push({ type: "kendohit", x: target.x, y: target.y, life: 0.15 });
-        if (target.hp <= 0) killZombie(game.zombies.indexOf(target));
+      // 단일 직접 타격
+      target.hp -= comp.dmg;
+      game.effects.push({ type: "kendohit", x: target.x, y: target.y, life: 0.15 });
+      if (target.hp <= 0) killZombie(game.zombies.indexOf(target));
+    },
+    // 이도류 발도: 공격 시도마다 카운트, 5번째 시도에서 현재 위치 기준 참격
+    //   (타격이든 점프든 넘어짐이든 '시도'면 카운트 → 이동 도중에도 발동, 동작엔 영향 없음)
+    tryDualBlade(comp) {
+      if (comp.dualLevel <= 0) return;
+      comp.dualCount = (comp.dualCount || 0) + 1;
+      if (comp.dualCount % 5 !== 0) return;
+      const at = { x: comp.x, y: comp.cy };
+      comp.haloT = 0.4 + (comp.dualLevel - 1) * 0.5 + 0.4;
+      this.doSlash(comp, at, comp.slashBaseR);
+      if (comp.dualLevel > 1) {
+        comp.slashQueue = comp.dualLevel - 1;
+        comp.slashTimer = 0.5;
+        comp.slashAt = at;
       }
     },
     // 원형 이도류 참격 (범위 r)
@@ -1119,7 +1132,7 @@ const COMPANION_DEFS = [
     upgrades: [
       { name: "검도부: 검술 단련", desc: "타격 피해 +40%", maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
       { name: "검도부: 축지법",   desc: "점프 후 넘어지지 않고 한 번 더 점프 (2렙 맥스)", maxLv: 2, apply: c => c.jumpMax += 1 },
-      { name: "검도부: 이도류 발도", desc: "5번째 공격마다 원형 이도류 참격 (지참/따라하기로 연속타)", maxLv: 1, apply: c => c.dualLevel += 1 },
+      { name: "검도부: 이도류 발도", desc: "5번째 공격마다 원형 이도류 참격 (지참/따라하기로 연속타)", maxLv: 1, unlock: true, apply: c => c.dualLevel += 1 },
     ],
     // 이도류 발도는 지참(+1)·의무병 따라하기(+1)로 맥스가 늘어 연속타가 됨
     cardFilter: (c, carryIdx) => {
@@ -1205,6 +1218,7 @@ function resetGame() {
     barrageFireT: 0,     // 저격수 탄환 세례 불꽃 오라 지속
     kendoUltT: 0,        // 검도부 만월참격 남은 시간
     kendoUltTick: 0,     // 만월참격 검살 발생 타이머
+    flyingIsseom: [],    // 만월참격: 허공 일섬 5개 (벽 반사 후 복귀)
     bikerGang: null,     // 폭주족 출격 대기열
     carpet: null,        // 융단 폭격 진행 상태
     overload: null,      // 과부하 방전 진행 상태
@@ -1485,6 +1499,45 @@ function update(dt) {
         }
       }
     }
+  }
+  // 만월참격 허공 일섬: 벽 5회 반사 후 본체 복귀 (하나라도 5회 채우면 전원 즉시 복귀)
+  if (game.flyingIsseom && game.flyingIsseom.length > 0) {
+    const kn = game.companions.find(c => c.def.id === "kendo");
+    const homeX = kn ? kn.x : W / 2, homeY = kn ? kn.cy : H / 2;
+    const idmg = (kn ? kn.dmg : 72) * 4;   // 일섬 피해
+    let triggerReturn = false;
+    for (const f of game.flyingIsseom) {
+      f.px = f.x; f.py = f.y;
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      if (!f.returning) {
+        // 벽 반사
+        if (f.x < 8)     { f.x = 8;     f.vx = Math.abs(f.vx);  f.bounces++; }
+        if (f.x > W - 8) { f.x = W - 8; f.vx = -Math.abs(f.vx); f.bounces++; }
+        if (f.y < 8)     { f.y = 8;     f.vy = Math.abs(f.vy);  f.bounces++; }
+        if (f.y > H - 8) { f.y = H - 8; f.vy = -Math.abs(f.vy); f.bounces++; }
+        if (f.bounces >= 5) triggerReturn = true;
+      } else {
+        // 복귀 중: 본체를 향해 이동, 도달하면 소멸
+        const a = Math.atan2(homeY - f.y, homeX - f.x);
+        const sp = 1100;
+        f.vx = Math.cos(a) * sp; f.vy = Math.sin(a) * sp;
+        if (Math.hypot(homeX - f.x, homeY - f.y) < 20) f.done = true;
+      }
+      // 경로상 적 타격 (선분 근처)
+      const ang = Math.atan2(f.y - f.py, f.x - f.px);
+      const seg = Math.hypot(f.x - f.px, f.y - f.py) || 1;
+      for (let j = game.zombies.length - 1; j >= 0; j--) {
+        const z = game.zombies[j];
+        const vx = z.x - f.px, vy = z.y - f.py;
+        const proj = vx * Math.cos(ang) + vy * Math.sin(ang);
+        if (proj < -10 || proj > seg + 10) continue;
+        const perp = Math.abs(-vx * Math.sin(ang) + vy * Math.cos(ang));
+        if (perp < 22) { z.hp -= idmg; if (z.hp <= 0) killZombie(j); }
+      }
+    }
+    // 하나라도 5회 반사 완료 → 전원 즉시 복귀 명령
+    if (triggerReturn) for (const f of game.flyingIsseom) f.returning = true;
+    game.flyingIsseom = game.flyingIsseom.filter(f => !f.done);
   }
   // [역전승] 버프 타이머 — 종료 시 임시 공 소멸
   if (game.soccerRushT > 0) {
@@ -1848,7 +1901,7 @@ function buildCardPool() {
         if (deployed.upLv[i] >= up.maxLv + bonus) return;   // 맥스 도달 카드는 제외
         others.push({
           tag: `${def.name} 강화 (${deployed.upLv[i]}/${up.maxLv + bonus})`, cls: "ally",
-          name: up.name, desc: up.desc,
+          name: up.name, desc: up.desc, unlock: !!up.unlock,
           apply: () => { up.apply(deployed); deployed.upLv[i]++; deployed.level++; },
         });
       });
@@ -1896,6 +1949,15 @@ function showCardChoices() {
     picks.push(recruits.splice(Math.floor(Math.random() * recruits.length), 1)[0]);
   }
   const pool = [...recruits, ...others];
+  // 50웨이브 이후: 해금형 카드가 있으면 제일 먼저 등장
+  if (game.wave >= 50) {
+    const unlocks = pool.filter(c => c.unlock);
+    while (picks.length < 3 && unlocks.length > 0) {
+      const c = unlocks.splice(Math.floor(Math.random() * unlocks.length), 1)[0];
+      picks.push(c);
+      pool.splice(pool.indexOf(c), 1);
+    }
+  }
   while (picks.length < 3 && pool.length > 0) {
     picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   }
@@ -1959,7 +2021,7 @@ function enterCamp() {
   game.gluePots = []; game.glueZones = []; game.medBuff = null;
   game.pushWave = null;
   game.laserT = 0; game.laserBeam = null; game.barrageFireT = 0;
-  game.kendoUltT = 0; game.kendoUltTick = 0;
+  game.kendoUltT = 0; game.kendoUltTick = 0; game.flyingIsseom = [];
   game.bikerGang = null; game.carpet = null; game.overload = null;
   game.homerunT = 0; game.soccerRushT = 0;
   game.specialBanners = []; game.enhanceBanners = [];
@@ -2232,6 +2294,17 @@ const SPECIAL_SKILLS = [
       if (!kn) return false;
       game.kendoUltT = 2;
       game.kendoUltTick = 0;
+      // 추가: 허공에 일섬 5개 발사 — 랜덤 방향, 벽 5회 반사 후 본체로 복귀
+      game.flyingIsseom = [];
+      for (let i = 0; i < 5; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 900;
+        game.flyingIsseom.push({
+          x: W / 2, y: H / 2,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          bounces: 0, returning: false, px: W / 2, py: H / 2,
+        });
+      }
       kiBurst("kendo");
       return true;
     },
@@ -2624,6 +2697,18 @@ function draw() {
   }
 
   // 드론 (드라이버 강화)
+  // 만월참격 허공 일섬 (파란 섬광 궤적)
+  if (game.flyingIsseom) for (const f of game.flyingIsseom) {
+    ctx.strokeStyle = f.returning ? "#aee0ff" : "#dff0ff";
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(f.x, f.y); ctx.stroke();
+    ctx.strokeStyle = "#4a90c2";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(f.px, f.py); ctx.lineTo(f.x, f.y); ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.arc(f.x, f.y, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
   for (const dr of game.drones) {
     ctx.fillStyle = "#3a4048";
     ctx.fillRect(dr.x - 8, dr.y - 4, 16, 8);         // 본체
