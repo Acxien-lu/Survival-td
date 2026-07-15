@@ -617,12 +617,16 @@ const COMPANION_DEFS = [
     // 카드 우선순위:
     //  - 범위 1업 전까진 범위 카드만
     //  - 폭탄광 미보유 + 총 2렙(강화 2회) 이상이면 다음 카드는 폭탄광 확정
-    //  - 그 외엔 범위/피해 (폭탄광은 이미 보유 시 제외)
-    cardFilter: c => {
+    //  - 폭탄광은 지참 시 맥스가 +1 되므로, 맥스 미달이면 계속 등장 (중첩 기믹)
+    cardFilter: (c, carryIdx) => {
       if (c.radiusLv < 1) return [0];
+      const bombKingMax = 1 + (carryIdx === 2 ? 1 : 0);   // 지참 시 +1
+      const bombKingAvail = c.upLv[2] < bombKingMax;
       const totalLv = c.upLv.reduce((s, v) => s + v, 0);
-      if (c.upLv[2] < 1 && totalLv >= 2) return [2];   // 2렙 이상 & 폭탄광 없으면 확정
-      return c.upLv[2] >= 1 ? [0, 1] : [0, 1, 2];
+      if (bombKingAvail && c.upLv[2] < 1 && totalLv >= 2) return [2];   // 첫 폭탄광 확정
+      const pool = [0, 1];
+      if (bombKingAvail) pool.push(2);
+      return pool;
     },
   },
   {
@@ -843,10 +847,10 @@ const COMPANION_DEFS = [
             ball.vx = Math.cos(a) * comp.ballSpeed;
             ball.vy = Math.sin(a) * comp.ballSpeed;
             ball.rest = false;
-            // 사감 강화: 8번째 킥마다 추가 인원이 특수 공을 참
+            // 사감 강화: 7번째 킥마다 추가 인원이 특수 공을 참
             if (game.warden && !ball.special) {
               comp.kickCount++;
-              if (comp.kickCount % 8 === 0) this.launchSpecialBall(comp);
+              if (comp.kickCount % 7 === 0) this.launchSpecialBall(comp);
             }
           }
           continue;
@@ -1271,22 +1275,6 @@ function update(dt) {
     if (b.y < -40 || b.y > H + 40 || b.x < -40 || b.x > W + 40) {
       game.bullets.splice(i, 1); continue;
     }
-    // ★ 시너지: 폭탄병의 폭탄이 드라이버의 차량에 맞으면 차량 즉시 유폭!
-    //   피해 = 폭탄병 피해 + 차량 피해, 범위 = 화면 가로 1/4 고정 원형
-    if (b.bomb) {
-      let hitCar = false;
-      for (let k = game.cars.length - 1; k >= 0; k--) {
-        const car = game.cars[k];
-        if (Math.abs(b.x - car.x) < 24 && Math.abs(b.y - car.y) < 36) {
-          explode(car.x, car.y, W * 0.3, b.damage + car.dmg, false, true);
-          game.cars.splice(k, 1);
-          game.bullets.splice(i, 1);
-          hitCar = true;
-          break;
-        }
-      }
-      if (hitCar) continue;
-    }
     for (let j = game.zombies.length - 1; j >= 0; j--) {
       const z = game.zombies[j];
       const dx = b.x - z.x, dy = b.y - z.y;
@@ -1428,7 +1416,7 @@ function update(dt) {
     p.x = p.sx + (p.tx - p.sx) * r;
     p.y = p.sy + (p.ty - p.sy) * r - Math.sin(r * Math.PI) * 90;   // 포물선 아치
     if (r >= 1) {
-      game.glueZones.push({ x: p.tx, y: p.ty, r: Math.sqrt(W * H / 4) / 4, t: 3 });
+      game.glueZones.push({ x: p.tx, y: p.ty, r: Math.sqrt(W * H / 4) / 4, t: 1.5 });
       game.gluePots.splice(i, 1);
     }
   }
@@ -1556,20 +1544,6 @@ function explode(x, y, radius, dmg, fromBomb, carBlast) {
       if (z.hp <= 0) killZombie(j);
     }
   }
-  // ★ 유폭: 폭탄의 폭발 범위에 차량이 닿으면 그 차량도 폭발
-  //   (차량 폭발끼리는 연쇄되지 않음 — 폭탄이 기폭제일 때만)
-  //   유폭 범위: 화면 가로의 30% 고정 (기존 1/4에서 +20%)
-  if (fromBomb) {
-    for (let k = game.cars.length - 1; k >= 0; k--) {
-      const car = game.cars[k];
-      const dx = car.x - x, dy = car.y - y;
-      if (dx * dx + dy * dy < (radius + 26) * (radius + 26)) {
-        const carDmg = car.dmg;
-        game.cars.splice(k, 1);
-        explode(car.x, car.y, W * 0.3, dmg + carDmg, false, true);
-      }
-    }
-  }
 }
 
 function fireAt(target) {
@@ -1634,7 +1608,7 @@ function buildCardPool() {
       }
     } else if (deployed) {
       // 강화 카드는 "출전 중"인 동료만 등장 (기숙사 대기 중이면 금지)
-      const allowed = def.cardFilter ? def.cardFilter(deployed) : def.upgrades.map((_, i) => i);
+      const allowed = def.cardFilter ? def.cardFilter(deployed, deployed.carryCard) : def.upgrades.map((_, i) => i);
       def.upgrades.forEach((up, i) => {
         if (!allowed.includes(i)) return;
         const bonus = deployed.carryCard === i ? 1 : 0;   // 지참 카드는 맥스 +1
