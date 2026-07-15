@@ -295,6 +295,7 @@ const ASSET_URLS = {
   engineer: "assets/engineer.png",
   batter: "assets/batter.png",
   soccer: "assets/soccer.png",
+  kendo: "assets/kendo.png",           // 검도부 (여성, 파란 세일러 교복, 이도류)
   sedan: "assets/sedan.png",           // 차량 4종 (드라이버 출격)
   bike: "assets/bike.png",
   truck: "assets/truck.png",
@@ -944,7 +945,7 @@ const COMPANION_DEFS = [
     mover: true,
     // dmg: 저격수 기본(90)의 80% = 72. cy: 현재 y좌표(맵을 돌아다님)
     initState: () => ({
-      cooldown: 0, dmg: 72, jumpMax: 0, dualBlade: false, atkCount: 0,
+      cooldown: 0, dmg: 72, jumpMax: 0, dualBlade: false, atkCount: 0, tryCount: 0,
       cy: CONFIG.playerY, tpT: 0, tpFrom: null, tpTo: null, downT: 0, jumpsUsed: 0,
     }),
     update(comp, dt) {
@@ -983,10 +984,41 @@ const COMPANION_DEFS = [
         if (d2 < bestD) { bestD = d2; target = z; }
       }
 
+      // 사감 강화: 모든 공격 시도(타격/점프 포함)를 세어 7번째마다 '일섬'
+      const doIsseom = () => {
+        if (!game.warden) return;
+        comp.tryCount++;
+        if (comp.tryCount % 7 !== 0) return;
+        // 발동 지점에서 가장 먼 적까지 직선으로 관통 참격
+        let far = null, fd = -1;
+        for (const z of game.zombies) {
+          const dx = z.x - comp.x, dy = z.y - comp.cy, d2 = dx * dx + dy * dy;
+          if (d2 > fd) { fd = d2; far = z; }
+        }
+        if (!far) return;
+        const ang = Math.atan2(far.y - comp.cy, far.x - comp.x);
+        const ex = comp.x + Math.cos(ang) * Math.hypot(W, H);
+        const ey = comp.cy + Math.sin(ang) * Math.hypot(W, H);
+        game.effects.push({ type: "isseom", x0: comp.x, y0: comp.cy, x1: ex, y1: ey, life: 0.3 });
+        // 직선 경로(폭 26) 위의 모든 적 타격
+        for (let j = game.zombies.length - 1; j >= 0; j--) {
+          const z = game.zombies[j];
+          const vx = z.x - comp.x, vy = z.y - comp.cy;
+          const proj = vx * Math.cos(ang) + vy * Math.sin(ang);
+          if (proj < 0) continue;
+          const perp = Math.abs(-vx * Math.sin(ang) + vy * Math.cos(ang));
+          if (perp < 26) {
+            z.hp -= comp.dmg * 2;
+            if (z.hp <= 0) killZombie(j);
+          }
+        }
+        pushBanner("일섬!", "#4a90c2", true);
+      };
+
       if (target) {
         // 사거리 내 적: 순간이동해 직접 타격
-        const dist = Math.sqrt(bestD) || 1;
         this.strike(comp, target);
+        doIsseom();
         comp.jumpsUsed = 0;   // 정상 타격 시 점프 카운터 리셋
         comp.cooldown = 0.3;
       } else {
@@ -997,6 +1029,7 @@ const COMPANION_DEFS = [
           if (d2 < nd) { nd = d2; near = z; }
         }
         if (!near) return;
+        doIsseom();   // 점프(넘어짐 포함)도 공격 시도로 카운트
         const ang = Math.atan2(near.y - comp.cy, near.x - comp.x);
         const tx = Math.max(30, Math.min(W - 30, comp.x + Math.cos(ang) * R));
         const ty = Math.max(80, Math.min(CONFIG.playerY, comp.cy + Math.sin(ang) * R));
@@ -1024,8 +1057,8 @@ const COMPANION_DEFS = [
       comp.tpT = comp.tpDur;
 
       comp.atkCount++;
-      // 이도류 발도: 4번째 공격마다 원형으로 강하게 벤다
-      if (comp.dualBlade && comp.atkCount % 4 === 0) {
+      // 이도류 발도: 5번째 공격마다 원형으로 강하게 벤다
+      if (comp.dualBlade && comp.atkCount % 5 === 0) {
         const r = 70;
         game.effects.push({ type: "kendoslash", x: target.x, y: target.y, r, life: 0.25 });
         const r2 = r * r;
@@ -1047,7 +1080,7 @@ const COMPANION_DEFS = [
     upgrades: [
       { name: "검도부: 검술 단련", desc: "타격 피해 +40%", maxLv: 5, apply: c => c.dmg = Math.round(c.dmg * 1.4) },
       { name: "검도부: 축지법",   desc: "점프 후 넘어지지 않고 한 번 더 점프 (2렙 맥스)", maxLv: 2, apply: c => c.jumpMax += 1 },
-      { name: "검도부: 이도류 발도", desc: "해금 — 4번째 공격마다 원형 이도류 참격", maxLv: 1, apply: c => c.dualBlade = true },
+      { name: "검도부: 이도류 발도", desc: "해금 — 5번째 공격마다 원형 이도류 참격", maxLv: 1, apply: c => c.dualBlade = true },
     ],
     cardFilter: c => [0, 1, 2],
   },
@@ -2731,6 +2764,17 @@ function draw() {
       ctx.strokeStyle = `rgba(255,200,120,${1 - t})`;          // 충격파 링
       ctx.lineWidth = 5;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r * t, 0, Math.PI * 2); ctx.stroke();
+    } else if (e.type === "isseom") {
+      // 일섬: 발동점→최원거리 직선 참격 섬광
+      const a = Math.max(0, e.life / 0.3);
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = "#dff0ff";
+      ctx.lineWidth = 6 * a + 1;
+      ctx.beginPath(); ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); ctx.stroke();
+      ctx.strokeStyle = "#8fc4ff";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(e.x0, e.y0); ctx.lineTo(e.x1, e.y1); ctx.stroke();
+      ctx.globalAlpha = 1;
     } else if (e.type === "kendoafter") {
       // 순간이동 잔상
       const a = Math.max(0, e.life / 0.18);
