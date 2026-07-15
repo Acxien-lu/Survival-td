@@ -244,7 +244,7 @@
   <!-- 개인 훈련소 패널: 주인공 영구 강화 -->
   <div id="train-panel">
     <h3>🎯 개인 훈련소</h3>
-    <div class="hint">보유 킬: <span id="train-kills" style="color:#d9a441; font-weight:700">0</span> · 구매마다 가격 2배 · <b style="color:#e06a5c">영구 유지</b></div>
+    <div class="hint">보유 킬: <span id="train-kills" style="color:#d9a441; font-weight:700">0</span> · 구매마다 +50킬 · <b style="color:#e06a5c">영구 유지</b></div>
     <div class="lodge-section" id="train-list"></div>
     <button class="fac-close" id="train-close">닫기</button>
   </div>
@@ -1007,14 +1007,12 @@ const COMPANION_DEFS = [
         if (d2 < bestD) { bestD = d2; target = z; }
       }
 
-      // 사감 강화: 모든 공격 시도(타격/점프 포함)를 세어 7카운트마다 '일섬'
-      //   → 축지법 레벨만큼 카운트가 더 빨리 참 (이도류 발도와 일관)
+      // 사감 강화: 모든 공격 시도(타격/점프 포함)를 세어 7번째마다 '일섬'
+      //   → 축지법 레벨은 카운트에 반영하지 않음 (매 시도 +1)
       const doIsseom = () => {
         if (!game.warden) return false;
-        const prev = comp.tryCount || 0;
-        comp.tryCount = prev + 1 + (comp.jumpMax || 0);   // 매 시도 +1 + 축지법 렙
-        // 7의 배수를 새로 넘겼을 때만 발동
-        if (Math.floor(comp.tryCount / 7) <= Math.floor(prev / 7)) return false;
+        comp.tryCount = (comp.tryCount || 0) + 1;
+        if (comp.tryCount % 7 !== 0) return false;
         let far = null, fd = -1;
         for (const z of game.zombies) {
           const dx = z.x - comp.x, dy = z.y - comp.cy, d2 = dx * dx + dy * dy;
@@ -1110,7 +1108,7 @@ const COMPANION_DEFS = [
         game.kendoSlashers.push({
           x: comp.x, y: comp.cy,
           dmg: comp.dmg, baseR: comp.slashBaseR,
-          total: comp.dualLevel, done: 0, timer: 0,
+          total: comp.dualLevel, done: 0, timer: 0.15,   // 첫 참격 0.15초 지연 (본체가 이동한 뒤 터짐)
         });
       }
       comp.haloT = 0.4 + (comp.dualLevel - 1) * 0.5 + 0.4;
@@ -2421,7 +2419,7 @@ function refreshTrain() {
   trainList.innerHTML = "";
   for (const sk of HERO_SKILLS) {
     const cnt = game.trainCounts[sk.name] || 0;
-    const cost = 50 * Math.pow(2, cnt);   // 구매마다 2배: 50 → 100 → 200 → 400...
+    const cost = 50 * (cnt + 1);   // 구매마다 +50킬: 50 → 100 → 150 → 200...
     const maxed = (sk.trainMax && cnt >= sk.trainMax) ||
                   (sk.available && !sk.available(game.permHero));
     const row = document.createElement("div");
