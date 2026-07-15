@@ -2070,6 +2070,19 @@ function enterCamp() {
 
 function campTap(x, y) {
   const hit = (z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+  // 🎮 히든 치트: 2층 좌측 관중석(방송실 왼쪽) 빠르게 연타 → 다음 웨이브 만렙 투입
+  if (x < W / 2 - 56 && y >= 36 && y <= 104) {
+    const now = performance.now();
+    if (!game.cheatTaps || now - game.cheatLastTap > 600) game.cheatTaps = 0;
+    game.cheatTaps++;
+    game.cheatLastTap = now;
+    if (game.cheatTaps >= 5) {
+      game.cheatArmed = true;              // 다음 출정 시 만렙 적용
+      game.cheatBorderT = 999;             // 전기 테두리 (출정 전까지 유지)
+      game.cheatTaps = 0;
+    }
+    return;
+  }
   if (hit(CAMP_ZONES.hall))   { openFacility("hall"); return; }
   if (hit(CAMP_ZONES.medic))  { openFacility("medic"); return; }
   if (hit(CAMP_ZONES.club))   { openClub(); return; }
@@ -2091,6 +2104,16 @@ function departCamp() {
   }
   for (const comp of allOwned()) if (comp.def.id !== "medic") applyCarryCard(comp);
   for (const comp of allOwned()) if (comp.def.id === "medic") applyCarryCard(comp);
+  // 🎮 치트: 출전 동료 전 카드 만렙 적용 (2층 좌측 관중석 연타로 발동)
+  if (game.cheatArmed) {
+    for (const comp of game.companions) {
+      comp.def.upgrades.forEach((up, i) => {
+        while (comp.upLv[i] < up.maxLv) { up.apply(comp); comp.upLv[i]++; comp.level++; }
+      });
+    }
+    game.cheatArmed = false;
+    game.cheatBorderT = 0;
+  }
   // 폭탄병: 지참/따라하기로 시작부터 적용된 폭탄광 수를 baseline으로 기록
   //   (웨이브 카드로 '추가로' 뽑은 폭탄광만 세어 확정 등장 판정하기 위함)
   for (const comp of allOwned()) {
@@ -2607,6 +2630,35 @@ function drawCamp() {
   ctx.beginPath(); ctx.roundRect(W / 2 - hw2 / 2, dz.y - 24, hw2, 17, 6); ctx.fill();
   ctx.fillStyle = "#c9b896";
   ctx.fillText(hint, W / 2, dz.y - 11);
+
+  // 🎮 치트 발동: 화면 테두리에 전기가 흐르는 연출
+  if (game.cheatBorderT > 0) {
+    const t = performance.now() / 1000;
+    ctx.save();
+    for (let layer = 0; layer < 2; layer++) {
+      ctx.strokeStyle = layer === 0 ? "rgba(120,200,255,0.9)" : "rgba(220,240,255,0.7)";
+      ctx.lineWidth = layer === 0 ? 5 : 2;
+      ctx.shadowColor = "#7ec8ff";
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      const seg = 14, amp = 4 + layer * 2;
+      // 지그재그 전기 테두리 (사각 둘레를 따라)
+      const pts = [];
+      for (let x = 0; x <= W; x += seg) pts.push([x, 3 + Math.sin(x * 0.3 + t * 20) * amp]);
+      for (let y = 0; y <= H; y += seg) pts.push([W - 3 - Math.sin(y * 0.3 + t * 20) * amp, y]);
+      for (let x = W; x >= 0; x -= seg) pts.push([x, H - 3 - Math.sin(x * 0.3 + t * 20) * amp]);
+      for (let y = H; y >= 0; y -= seg) pts.push([3 + Math.sin(y * 0.3 + t * 20) * amp, y]);
+      pts.forEach(([px, py], i) => i ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
+    // 안내 문구
+    ctx.fillStyle = "rgba(120,200,255,0.95)";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("\u26a1 \ub2e4\uc74c \uc6e8\uc774\ube0c: \ub3d9\ub8cc \ub9cc\ub809 \ud22c\uc785 \u26a1", W / 2, 124);
+  }
 }
 
 /* ================================================================
