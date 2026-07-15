@@ -1519,21 +1519,21 @@ function update(dt) {
 // fromBomb=true(폭탄병의 폭탄)일 때는 폭발 범위에 닿은 차량도 유폭시킴 (시너지)
 // carBlast=true(차량 유폭)일 때는 훨씬 진한 화염 이펙트를 사용
 // 폭탄 기폭: 폭탄광이면 한 지점에서 여러 번(펑 횟수) 터지고,
-//   뒤로(위로) 튀어 이전 범위와 1/2 겹치는 위치에서 또 터짐 (바운스 2회).
+//   뒤로(위로) 튀어 이전 범위와 1/2 겹치는 위치에서 또 터짐 (바운스 2회 = 3지점).
+//   ★ 성능: 차량 유폭은 각 지점의 '첫 펑'에서만 (연쇄 폭주 방지)
 function bombDetonate(b) {
-  const count = Math.max(1, b.bombKing || 1);   // 지점당 폭발 횟수 (펑펑…)
-  const bounces = b.bounceLeft || 0;            // 남은 바운스 (폭탄광이면 2)
-  let x = b.x, y = b.y;
-  const r = b.radius;
-  const step = r * 2 * 0.5;   // 뒤로 이동량: 지름의 50% → 범위 1/2 겹침
+  const count = Math.min(4, Math.max(1, b.bombKing || 1));   // 지점당 펑 (상한 4)
+  const bounces = Math.min(2, b.bounceLeft || 0);            // 바운스 상한 2
+  let y = b.y;
+  const x = b.x, r = b.radius, step = r * 2 * 0.5;
   for (let bounce = 0; bounce <= bounces; bounce++) {
     for (let p = 0; p < count; p++) {
-      // 여러 번 터질 땐 살짝 랜덤 오프셋을 줘 "펑펑" 느낌
       const ox = p === 0 ? 0 : (Math.random() - 0.5) * r * 0.5;
       const oy = p === 0 ? 0 : (Math.random() - 0.5) * r * 0.5;
-      explode(x + ox, y + oy, r, b.damage, true);
+      // 첫 펑만 차량 유폭 허용, 나머지 펑은 유폭 없이 (fromBomb=false)
+      explode(x + ox, y + oy, r, b.damage, p === 0);
     }
-    y -= step;   // 뒤(위)로 튐
+    y -= step;
     if (y < -r) break;
   }
 }
