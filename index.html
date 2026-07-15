@@ -1135,6 +1135,12 @@ pauseBadge.onclick = () => { pausedByHide = false; pauseBadge.style.display = "n
    [8] 업데이트 (전투)
    ================================================================ */
 function update(dt) {
+  // 성능 보호: 배열이 과도하게 쌓이면 오래된 것부터 버려 프리징 방지
+  if (game.effects.length > 400) game.effects.splice(0, game.effects.length - 400);
+  if (game.bullets.length > 400) game.bullets.splice(0, game.bullets.length - 400);
+  if (game.drones.length > 40)   game.drones.splice(0, game.drones.length - 40);
+  if (dt > 0.1) dt = 0.1;   // 탭 복귀 등으로 dt가 크게 튀면 물리 폭주 방지
+
   // 스폰 — 물량전이라 간격도 1/5
   if (game.spawnQueue > 0) {
     game.spawnTimer -= dt;
