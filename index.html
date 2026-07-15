@@ -1001,40 +1001,51 @@ const COMPANION_DEFS = [
       }
 
       // 사감 강화: 모든 공격 시도(타격/점프 포함)를 세어 7번째마다 '일섬'
+      //   → 가장 먼 적 위치로 순간이동(착지)하며 그 직선 경로를 벤다 (이동기+공격기)
       const doIsseom = () => {
-        if (!game.warden) return;
+        if (!game.warden) return false;
         comp.tryCount++;
-        if (comp.tryCount % 7 !== 0) return;
-        // 발동 지점에서 가장 먼 적까지 직선으로 관통 참격
+        if (comp.tryCount % 7 !== 0) return false;
         let far = null, fd = -1;
         for (const z of game.zombies) {
           const dx = z.x - comp.x, dy = z.y - comp.cy, d2 = dx * dx + dy * dy;
           if (d2 > fd) { fd = d2; far = z; }
         }
-        if (!far) return;
-        const ang = Math.atan2(far.y - comp.cy, far.x - comp.x);
-        const ex = comp.x + Math.cos(ang) * Math.hypot(W, H);
-        const ey = comp.cy + Math.sin(ang) * Math.hypot(W, H);
-        game.effects.push({ type: "isseom", x0: comp.x, y0: comp.cy, x1: ex, y1: ey, life: 0.3 });
-        // 직선 경로(폭 26) 위의 모든 적 타격
+        if (!far) return false;
+        const sx = comp.x, sy = comp.cy;
+        const ang = Math.atan2(far.y - sy, far.x - sx);
+        // 참격 섬광: 시작점 → 도착점(가장 먼 적)
+        game.effects.push({ type: "isseom", x0: sx, y0: sy, x1: far.x, y1: far.y, life: 0.3 });
+        // 경로(시작~도착) 위 폭 26 안의 적 전부 타격
+        const pathLen = Math.hypot(far.x - sx, far.y - sy);
         for (let j = game.zombies.length - 1; j >= 0; j--) {
           const z = game.zombies[j];
-          const vx = z.x - comp.x, vy = z.y - comp.cy;
+          const vx = z.x - sx, vy = z.y - sy;
           const proj = vx * Math.cos(ang) + vy * Math.sin(ang);
-          if (proj < 0) continue;
+          if (proj < 0 || proj > pathLen + 20) continue;
           const perp = Math.abs(-vx * Math.sin(ang) + vy * Math.cos(ang));
           if (perp < 26) {
             z.hp -= comp.dmg * 2;
             if (z.hp <= 0) killZombie(j);
           }
         }
+        // 실제 착지: 도착지(가장 먼 적 위치)로 순간이동
+        const tx = Math.max(30, Math.min(W - 30, far.x));
+        const ty = Math.max(80, Math.min(CONFIG.playerY, far.y));
+        comp.tpFrom = { x: sx, y: sy };
+        comp.tpTo = { x: tx, y: ty };
+        comp.tpDur = 0.12;
+        comp.tpT = comp.tpDur;
+        comp.jumpsUsed = 0;   // 일섬으로 이동했으니 점프 카운터 리셋
+        comp.cooldown = 0.3;
         pushBanner("일섬!", "#4a90c2", true);
+        return true;
       };
 
       if (target) {
-        // 사거리 내 적: 순간이동해 직접 타격
+        // 사거리 내 적: 순간이동해 직접 타격 (일섬 발동 시 그쪽으로 이동)
+        if (doIsseom()) return;
         this.strike(comp, target);
-        doIsseom();
         comp.jumpsUsed = 0;   // 정상 타격 시 점프 카운터 리셋
         comp.cooldown = 0.3;
       } else {
@@ -1045,7 +1056,7 @@ const COMPANION_DEFS = [
           if (d2 < nd) { nd = d2; near = z; }
         }
         if (!near) return;
-        doIsseom();   // 점프(넘어짐 포함)도 공격 시도로 카운트
+        if (doIsseom()) return;   // 점프 대신 일섬 발동 시 그쪽으로 이동(넘어짐 없음)
         const ang = Math.atan2(near.y - comp.cy, near.x - comp.x);
         const tx = Math.max(30, Math.min(W - 30, comp.x + Math.cos(ang) * R));
         const ty = Math.max(80, Math.min(CONFIG.playerY, comp.cy + Math.sin(ang) * R));
