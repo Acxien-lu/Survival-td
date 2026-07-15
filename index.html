@@ -1203,8 +1203,8 @@ function resetGame() {
     laserT: 0,           // 레이저 남은 시간 (미사용)
     laserBeam: null,     // 레이저 빔 좌표 (미사용)
     barrageFireT: 0,     // 저격수 탄환 세례 불꽃 오라 지속
-    kendoUltT: 0,        // 검도부 천살 남은 시간
-    kendoUltTick: 0,     // 천살 검살 발생 타이머
+    kendoUltT: 0,        // 검도부 만월참격 남은 시간
+    kendoUltTick: 0,     // 만월참격 검살 발생 타이머
     bikerGang: null,     // 폭주족 출격 대기열
     carpet: null,        // 융단 폭격 진행 상태
     overload: null,      // 과부하 방전 진행 상태
@@ -1460,11 +1460,11 @@ function update(dt) {
   // [투런 홈런] 버프 타이머
   if (game.homerunT > 0) game.homerunT -= dt;
   if (game.barrageFireT > 0) game.barrageFireT -= dt;
-  // 검도부 천살: 2초간 화면 전체에 검살 난무
+  // 검도부 만월참격: 2초간 화면 전체에 검살 난무
   if (game.kendoUltT > 0) {
     game.kendoUltT -= dt;
     const kn = game.companions.find(c => c.def.id === "kendo");
-    if (kn) { kn.x = W / 2; kn.cy = CONFIG.playerY - 40; }   // 정중앙 고정
+    if (kn) { kn.x = W / 2; kn.cy = H / 2; }   // 화면 정중앙(가로·세로 중앙) 고정
     game.kendoUltTick -= dt;
     if (game.kendoUltTick <= 0) {
       game.kendoUltTick = 0.05;   // 초당 20회 검살
@@ -2225,8 +2225,8 @@ const SPECIAL_SKILLS = [
     },
   },
   {
-    id: "kendoult", owner: "검도부", name: "천살", cd: 15,
-    desc: "화면 중앙으로 이동 후 2초간 화면 전체에 검살 난무 (쿨 15초)",
+    id: "kendoult", owner: "검도부", name: "만월참격", cd: 15,
+    desc: "화면 정중앙으로 이동 후 2초간 화면 전체에 검살 난무 (쿨 15초)",
     run() {
       const kn = game.companions.find(c => c.def.id === "kendo");
       if (!kn) return false;
@@ -2853,7 +2853,7 @@ function draw() {
       ctx.beginPath(); ctx.moveTo(e.x, e.y - e.r); ctx.lineTo(e.x, e.y + e.r); ctx.stroke();
       ctx.globalAlpha = 1;
     } else if (e.type === "kendostorm") {
-      // 천살: 화면 곳곳의 검살 잔상
+      // 만월참격: 화면 곳곳의 검살 잔상
       const a = Math.max(0, e.life / 0.3);
       ctx.globalAlpha = a;
       ctx.strokeStyle = "#eaf4ff";
@@ -3148,7 +3148,7 @@ function drawCompanion(comp) {
   ctx.textAlign = "center";
   ctx.fillText(`${comp.def.name} Lv${comp.level}`, x, y + 24);
 
-  // 검도부: 이도류 발도 해금 후 천사링, 천살(특수 스킬) 중 천사 날개
+  // 검도부: 이도류 발도 해금 후 천사링, 만월참격(특수 스킬) 중 천사 날개
   if (comp.def.id === "kendo") {
     if (comp.haloT > 0) {
       ctx.strokeStyle = "#ffe680";
